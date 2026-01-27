@@ -18,18 +18,36 @@ local selectedOre = CONFIG.Ore
 local selectedBankingLocation = CONFIG.BankingLocation
 local useOreBox = Utils.toBool(CONFIG.UseOreBox)
 local chaseRockertunities = Utils.toBool(CONFIG.ChaseRockertunities)
+local threeTickMining = Utils.toBool(CONFIG.ThreeTickMining)
 local bankPin = CONFIG.BankPin or ""
+local staminaRefreshPercent = tonumber(CONFIG.StaminaRefreshPercent:match("%d+")) or 85
 
 local playerOreBox = nil
-local staminaThreshold = math.random(160, 190)
-local lastMineAttempt = 0
+local lastInteractTime = 0
+local lastInteractTick = 0
+local nextTickTarget = 0
 
 local function isMiningActive()
     return API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS) > 0 and API.ReadPlayerAnim() ~= 0
 end
 
-local function canAttemptMine()
-    return os.time() - lastMineAttempt >= 3
+local function canInteract()
+    return os.time() - lastInteractTime >= 3
+end
+
+local function shouldThreeTick()
+    if not threeTickMining then return false end
+    if API.ReadPlayerMovin2() then return false end
+
+    local currentTick = API.Get_tick()
+    local ticksSinceLastInteract = currentTick - lastInteractTick
+
+    if lastInteractTick == 0 then
+        nextTickTarget = math.random(100) <= 3 and 4 or math.random(2, 3)
+        return true
+    end
+
+    return ticksSinceLastInteract >= nextTickTarget
 end
 
 local function findRockertunity(oreConfig)
@@ -55,21 +73,51 @@ local function findRockertunity(oreConfig)
 end
 
 local function mineRockertunity(oreConfig, rockTarget)
-    local tile = WPOINT.new(rockTarget.x, rockTarget.y, 0)
-    API.logInfo("Mining rockertunity at " .. rockTarget.x .. ", " .. rockTarget.y .. " (rock ID: " .. rockTarget.id .. ")")
+    API.logInfo("Mining rockertunity at " .. rockTarget.x .. ", " .. rockTarget.y)
 
     API.RandomSleep2(600, 400, 200)
 
+    local tile = WPOINT.new(rockTarget.x, rockTarget.y, 0)
     API.DoAction_Object2(0x3a, API.OFF_ACT_GeneralObject_route0, {rockTarget.id}, 40, tile)
-    Utils.waitOrTerminate(function() return API.ReadPlayerMovin2() end, 5, 50, "Failed to start moving to rockertunity")
-    return Utils.waitOrTerminate(function() return isMiningActive() end, 7, 50, "Failed to start mining rockertunity")
+    lastInteractTime = os.time()
+
+    local function isGone()
+        local rockertunities = API.GetAllObjArray1(DATA.ROCKERTUNITY_IDS, 20, {4})
+        for _, rockertunity in ipairs(rockertunities) do
+            local distance = Utils.getDistance(rockTarget.x, rockTarget.y, rockertunity.Tile_XYZ.x, rockertunity.Tile_XYZ.y)
+            if distance < 1 then
+                return false
+            end
+        end
+        return true
+    end
+
+    return Utils.waitOrTerminate(isGone, 30, 100, "Rockertunity did not disappear")
+end
+
+local function isNearOreLocation(location, selectedOre)
+    if not location.oreCoords or not location.oreCoords[selectedOre] then
+        return false
+    end
+
+    local oreCoord = location.oreCoords[selectedOre]
+    local playerCoord = API.PlayerCoord()
+    local distance = Utils.getDistance(playerCoord.x, playerCoord.y, oreCoord.x, oreCoord.y)
+    return distance <= 20
 end
 
 local function mineRock(oreConfig)
     API.logInfo("Mining " .. oreConfig.name .. "...")
-    Interact:Object(oreConfig.name, oreConfig.action, 20)
-    lastMineAttempt = os.time()
+    Interact:Object(oreConfig.name, oreConfig.action, 25)
+    lastInteractTime = os.time()
     return Utils.waitOrTerminate(function() return isMiningActive() end, 30, 50, "Failed to start mining")
+end
+
+local function threeTickInteract(oreConfig)
+    Interact:Object(oreConfig.name, oreConfig.action, 25)
+    lastInteractTick = API.Get_tick()
+    nextTickTarget = math.random(100) <= 3 and 4 or math.random(2, 3)
+    API.RandomSleep2(50, 25, 25)
 end
 
 API.Write_fake_mouse_do(false)
@@ -86,104 +134,21 @@ if useOreBox then
     end
 end
 
-local location = LOCATIONS[selectedLocation]
-local oreConfig = ORES[selectedOre]
+local validated = Utils.validateMiningSetup(
+    selectedLocation, selectedOre, selectedBankingLocation,
+    playerOreBox, useOreBox,
+    LOCATIONS, ORES, Banking, Routes, Teleports, OreBox, DATA
+)
 
-if not location then
-    API.logError("Invalid location: " .. selectedLocation)
+if not validated then
     return
 end
 
-if not oreConfig then
-    API.logError("Invalid ore: " .. selectedOre)
-    return
-end
-
-local oreAvailable = false
-for _, ore in ipairs(location.ores) do
-    if ore == selectedOre then
-        oreAvailable = true
-        break
-    end
-end
-if not oreAvailable then
-    API.logError(oreConfig.name .. " is not available at " .. location.name)
-    local availableAt = {}
-    for locKey, loc in pairs(LOCATIONS) do
-        for _, ore in ipairs(loc.ores) do
-            if ore == selectedOre then
-                table.insert(availableAt, loc.name)
-                break
-            end
-        end
-    end
-    if #availableAt > 0 then
-        API.logInfo("Available at: " .. table.concat(availableAt, ", "))
-    end
-    return
-end
-
-local miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
-if miningLevel < oreConfig.tier then
-    API.logError("Mining level " .. miningLevel .. " is below required level " .. oreConfig.tier .. " for " .. oreConfig.name)
-    return
-end
-
-if useOreBox and not OreBox.validate(playerOreBox, oreConfig) then
-    useOreBox = false
-    playerOreBox = nil
-end
-
-for _, dungOre in ipairs(DATA.DUNGEONEERING_ORES) do
-    if selectedOre == dungOre then
-        if not Teleports.hasRingOfKinship() then
-            API.logError("Ring of Kinship required for Dungeoneering ores (not found in inventory or equipped)")
-            return
-        end
-        break
-    end
-end
-
-local bankLocation = Banking.LOCATIONS[selectedBankingLocation]
-if not bankLocation then
-    API.logError("Invalid banking location: " .. selectedBankingLocation)
-    return
-end
-
-if selectedBankingLocation == "player_owned_farm" then
-    if API.GetVarbitValue(DATA.VARBIT_IDS.POF_BANK_UNLOCKED) == 0 then
-        API.logError("Player Owned Farm bank chest is not unlocked")
-        return
-    end
-end
-
-Routes.checkLodestonesForDestination(location)
-Routes.checkLodestonesForDestination(bankLocation)
-
-if location.requiredLevels then
-    for _, req in ipairs(location.requiredLevels) do
-        local skillLevel = API.XPLevelTable(API.GetSkillXP(req.skill))
-        if skillLevel < req.level then
-            API.logError(req.skill .. " level " .. skillLevel .. " is below required level " .. req.level .. " for " .. location.name)
-            return
-        end
-    end
-end
-
-if selectedLocation == "dwarven_mine" or selectedLocation == "dwarven_resource_dungeon" then
-    local combatLevel = Utils.getCombatLevel()
-    if combatLevel < 45 then
-        API.logWarn("Combat level " .. combatLevel .. " is below 45. You may be attacked by scorpions.")
-        if not Utils.disableAutoRetaliate() then
-            return
-        end
-    end
-elseif selectedLocation == "wilderness_south_west" then
-    API.logWarn("Skeletons will attack players of any combat level at this location.")
-    if not Utils.disableAutoRetaliate() then
-        return
-    end
-end
+local location = validated.location
+local oreConfig = validated.oreConfig
+local bankLocation = validated.bankLocation
+useOreBox = validated.useOreBox
+playerOreBox = validated.playerOreBox
 
 local oreBoxCapacity = playerOreBox and OreBox.getCapacity(playerOreBox, oreConfig) or 0
 
@@ -203,8 +168,11 @@ local function drawStats()
         {"Location:", location.name},
         {"Banking:", bankLocation.name},
         {"Ore:", oreName},
-        {"Stamina:", API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS) .. "/" .. staminaThreshold}
+        {"Stamina:", Utils.getCurrentStamina() .. "/" .. Utils.calculateMaxStamina() .. " (" .. string.format("%.1f%%", Utils.getStaminaPercent()) .. ")"}
     }
+    if threeTickMining then
+        table.insert(statsTable, {"Mode:", "3-tick"})
+    end
     if playerOreBox then
         table.insert(statsTable, {"Ore box:", OreBox.getOreCount(oreConfig) .. "/" .. oreBoxCapacity})
     end
@@ -215,34 +183,44 @@ API.logInfo("Location: " .. location.name)
 API.logInfo("Ore: " .. oreConfig.name)
 API.logInfo("Banking: " .. bankLocation.name)
 API.logInfo("Use Ore Box: " .. tostring(useOreBox))
+API.logInfo("3-tick Mining: " .. tostring(threeTickMining))
 
 while API.Read_LoopyLoop() do
     if not idleHandler.check() then break end
     idleHandler.collectGarbage()
     drawStats()
+
     if needsBanking() then
-        if not Banking.performBanking(bankLocation, location, playerOreBox, oreConfig, bankPin) then
+        if not Banking.performBanking(bankLocation, location, playerOreBox, oreConfig, bankPin, selectedOre) then
             break
         end
-    elseif Utils.isAtRegion(location.oreRegions and location.oreRegions[selectedOre] or location.region) then
+    elseif isNearOreLocation(location, selectedOre) then
         local invFull = Inventory:IsFull()
         local rockertunity = chaseRockertunities and findRockertunity(oreConfig) or nil
-        local stamina = API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS)
+        local staminaPercent = Utils.getStaminaPercent()
+
         if invFull and useOreBox and playerOreBox then
             OreBox.fill(playerOreBox)
-        elseif rockertunity and canAttemptMine() then
+        elseif threeTickMining then
+            if rockertunity and canInteract() then
+                if not mineRockertunity(oreConfig, rockertunity) then break end
+                lastInteractTick = API.Get_tick()
+                nextTickTarget = math.random(100) <= 3 and 4 or math.random(2, 3)
+            elseif shouldThreeTick() then
+                threeTickInteract(oreConfig)
+            end
+        elseif rockertunity and canInteract() then
             if not mineRockertunity(oreConfig, rockertunity) then break end
-            staminaThreshold = math.random(160, 190)
-        elseif stamina >= staminaThreshold and canAttemptMine() then
+        elseif staminaPercent >= staminaRefreshPercent and canInteract() then
             if not mineRock(oreConfig) then break end
-            staminaThreshold = math.random(160, 190)
-        elseif not isMiningActive() and canAttemptMine() then
+        elseif not isMiningActive() and canInteract() then
             if not mineRock(oreConfig) then break end
         end
     else
-        if not Routes.travelTo(location) then break end
+        if not Routes.travelTo(location, selectedOre) then break end
         if location.oreWaypoints and location.oreWaypoints[selectedOre] then
             if not Utils.walkThroughWaypoints(location.oreWaypoints[selectedOre]) then break end
+            if not Utils.ensureAtOreLocation(location, selectedOre) then break end
         end
     end
     API.RandomSleep2(100, 100, 0)

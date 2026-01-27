@@ -198,13 +198,24 @@ function Routes.checkLodestonesForDestination(destination)
     end
 end
 
-function Routes.travelTo(destination)
+local function isAtDestination(destination, selectedOre)
+    if not destination.oreCoords or not selectedOre or not destination.oreCoords[selectedOre] then
+        return false
+    end
+
+    local oreCoord = destination.oreCoords[selectedOre]
+    local playerCoord = API.PlayerCoord()
+    local distance = Utils.getDistance(playerCoord.x, playerCoord.y, oreCoord.x, oreCoord.y)
+    return distance <= 20
+end
+
+function Routes.travelTo(destination, selectedOre)
     if not destination then
         API.logError("No destination provided")
         return false
     end
 
-    if destination.region and Utils.isAtRegion(destination.region) then
+    if isAtDestination(destination, selectedOre) then
         API.logInfo("Already at " .. destination.name)
         return true
     end
@@ -244,6 +255,13 @@ function Routes.travelTo(destination)
     if not Routes.execute(route) then
         API.logWarn("Route to " .. destination.name .. " failed")
         return false
+    end
+
+    if selectedOre and not (destination.oreWaypoints and destination.oreWaypoints[selectedOre]) then
+        if not Utils.ensureAtOreLocation(destination, selectedOre) then
+            API.logWarn("Failed to reach ore location")
+            return false
+        end
     end
 
     API.logInfo("Arrived at " .. destination.name)

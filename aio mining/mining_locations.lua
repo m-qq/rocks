@@ -3,89 +3,123 @@ local Routes = require("aio mining/mining_routes")
 local MINING_LOCATIONS = {
     empty_throne_room = {
         name = "Empty Throne Room",
-        region = {x = 44, y = 197, z = 11461},
         route = Routes.TO_EMPTY_THRONE_ROOM,
-        ores = {"dark_animica"}
+        ores = {"dark_animica"},
+        oreCoords = {
+            dark_animica = {x = 2878, y = 12638}
+        }
     },
 
     anachronia_sw = {
         name = "Anachronia South-West",
-        region = {x = 83, y = 35, z = 21283},
         route = Routes.TO_ANACHRONIA_SW,
-        ores = {"light_animica"}
+        ores = {"light_animica"},
+        oreCoords = {
+            light_animica = {x = 5340, y = 2255}
+        }
     },
 
     al_kharid = {
         name = "Al Kharid",
-        region = {x = 51, y = 51, z = 13107},
         route = Routes.TO_AL_KHARID_MINE,
-        ores = {"gold", "silver"}
+        ores = {"gold", "silver"},
+        oreCoords = {
+            gold = {x = 3302, y = 3290},
+            silver = {x = 3299, y = 3298}
+        }
     },
 
     al_kharid_resource_dungeon = {
         name = "Al Kharid Resource Dungeon",
-        region = {x = 18, y = 70, z = 4678},
         route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON,
         ores = {"drakolith", "necrite"},
+        oreCoords = {
+            drakolith = {x = 1175, y = 4516},
+            necrite = {x = 1191, y = 4513}
+        },
         requiredLevels = {{skill = "DUNGEONEERING", level = 75}}
     },
 
     varrock_sw = {
         name = "Varrock South-West",
-        region = {x = 49, y = 52, z = 12596},
         route = Routes.TO_VARROCK_SW_MINE,
-        ores = {"copper", "tin", "iron", "mithril"}
+        ores = {"copper", "tin", "iron", "mithril"},
+        oreCoords = {
+            copper = {x = 3177, y = 3366},
+            tin = {x = 3177, y = 3370},
+            iron = {x = 3181, y = 3373},
+            mithril = {x = 3182, y = 3377}
+        }
     },
 
     varrock_se = {
         name = "Varrock South-East",
-        region = {x = 51, y = 52, z = 13108},
         route = Routes.TO_VARROCK_SE_MINE,
-        ores = {"copper", "tin", "mithril", "adamant"}
+        ores = {"copper", "tin", "mithril", "adamant"},
+        oreCoords = {
+            copper = {x = 3286, y = 3369},
+            tin = {x = 3287, y = 3367},
+            mithril = {x = 3283, y = 3366},
+            adamant = {x = 3289, y = 3361}
+        }
     },
 
     lumbridge_se = {
         name = "Lumbridge South-East",
-        region = {x = 50, y = 49, z = 12849},
         route = Routes.TO_LUMBRIDGE_SE_MINE,
-        ores = {"copper", "tin"}
+        ores = {"copper", "tin"},
+        oreCoords = {
+            copper = {x = 3231, y = 3149},
+            tin = {x = 3227, y = 3147}
+        }
     },
 
     lumbridge_sw = {
         name = "Lumbridge South-West",
-        region = {x = 49, y = 49, z = 12593},
         route = Routes.TO_LUMBRIDGE_SW_MINE,
-        ores = {"iron", "coal"}
+        ores = {"iron", "coal"},
+        oreCoords = {
+            iron = {x = 3145, y = 3147},
+            coal = {x = 3147, y = 3145}
+        }
     },
 
     rimmington = {
         name = "Rimmington",
-        region = {x = 46, y = 50, z = 11826},
         route = Routes.TO_RIMMINGTON_MINE,
-        ores = {"copper", "tin", "adamant", "gold"}
+        ores = {"copper", "tin", "adamant", "gold"},
+        oreCoords = {
+            copper = {x = 2969, y = 3234},
+            tin = {x = 2969, y = 3238},
+            adamant = {x = 2977, y = 3232},
+            gold = {x = 2980, y = 3239}
+        }
     },
 
     dwarven_mine = {
         name = "Dwarven Mine",
         route = Routes.TO_DWARVEN_MINE,
         ores = {"iron", "coal", "luminite"},
+        oreCoords = {
+            iron = {x = 3050, y = 9782},
+            coal = {x = 3052, y = 9816},
+            luminite = {x = 3038, y = 9762}
+        },
         oreWaypoints = {
             iron = {{x = 3049, y = 9782}},
             coal = {{x = 3043, y = 9791}, {x = 3051, y = 9815}},
             luminite = {{x = 3038, y = 9763}}
-        },
-        oreRegions = {
-            iron = {x = 47, y = 152, z = 12184},
-            coal = {x = 47, y = 153, z = 12185},
-            luminite = {x = 47, y = 152, z = 12184}
         }
     },
 
     dwarven_resource_dungeon = {
         name = "Dwarven Resource Dungeon",
-        region = {x = 16, y = 71, z = 4167},
         route = Routes.TO_DWARVEN_RESOURCE_DUNGEON,
         ores = {"mithril", "gold"},
+        oreCoords = {
+            mithril = {x = 1047, y = 4577},
+            gold = {x = 1063, y = 4574}
+        },
         oreWaypoints = {
             gold = {{x = 1064, y = 4573}}
         },
@@ -94,13 +128,17 @@ local MINING_LOCATIONS = {
 
     mining_guild = {
         name = "Mining Guild",
-        region = {x = 47, y = 152, z = 12184},
         routeOptions = {
             { condition = { nearCoord = {x = 3061, y = 3340} }, route = Routes.TO_MINING_GUILD_FROM_ARTISANS_GUILD_BANK },
             { condition = { region = {x = 47, y = 52, z = 12084} }, route = Routes.TO_MINING_GUILD_FROM_ARTISANS_WORKSHOP },
             { route = Routes.TO_MINING_GUILD }
         },
         ores = {"coal", "runite", "orichalcite"},
+        oreCoords = {
+            coal = {x = 3044, y = 9747},
+            runite = {x = 3032, y = 9738},
+            orichalcite = {x = 3044, y = 9735}
+        },
         oreWaypoints = {
             runite = {{x = 3032, y = 9738}},
             orichalcite = {{x = 3044, y = 9734}},
@@ -111,13 +149,16 @@ local MINING_LOCATIONS = {
 
     mining_guild_resource_dungeon = {
         name = "Mining Guild Resource Dungeon",
-        region = {x = 16, y = 70, z = 4166},
         routeOptions = {
             { condition = { nearCoord = {x = 3061, y = 3340} }, route = Routes.TO_MINING_GUILD_RESOURCE_DUNGEON_FROM_ARTISANS_GUILD_BANK },
             { condition = { region = {x = 47, y = 52, z = 12084} }, route = Routes.TO_MINING_GUILD_RESOURCE_DUNGEON_FROM_ARTISANS_WORKSHOP },
             { route = Routes.TO_MINING_GUILD_RESOURCE_DUNGEON }
         },
         ores = {"luminite", "drakolith"},
+        oreCoords = {
+            luminite = {x = 1052, y = 4514},
+            drakolith = {x = 1059, y = 4514}
+        },
         requiredLevels = {
             {skill = "MINING", level = 60},
             {skill = "DUNGEONEERING", level = 45}
@@ -126,114 +167,152 @@ local MINING_LOCATIONS = {
 
     wilderness_volcano = {
         name = "Wilderness Volcano",
-        region = {x = 49, y = 56, z = 12600},
         route = Routes.TO_WILDERNESS_VOLCANO_MINE,
-        ores = {"drakolith"}
+        ores = {"drakolith"},
+        oreCoords = {
+            drakolith = {x = 3185, y = 3632}
+        }
     },
 
     wilderness_hobgoblin = {
         name = "Wilderness Hobgoblin",
-        region = {x = 47, y = 59, z = 12091},
         route = Routes.TO_WILDERNESS_HOBGOBLIN_MINE,
-        ores = {"necrite"}
+        ores = {"necrite"},
+        oreCoords = {
+            necrite = {x = 3032, y = 3799}
+        }
     },
 
     wilderness_pirates_hideout = {
         name = "Wilderness Pirates Hideout",
-        region = {x = 47, y = 61, z = 12093},
         route = Routes.TO_WILDERNESS_PIRATES_HIDEOUT,
-        ores = {"banite"}
+        ores = {"banite"},
+        oreCoords = {
+            banite = {x = 3059, y = 3946}
+        }
     },
 
     wilderness_south = {
         name = "Wilderness South",
-        region = {x = 48, y = 55, z = 12343},
         route = Routes.TO_WILDERNESS_SOUTH_MINE,
-        ores = {"runite"}
+        ores = {"runite"},
+        oreCoords = {
+            runite = {x = 3103, y = 3568}
+        }
     },
 
     wilderness_south_west = {
         name = "Wilderness South-West",
-        region = {x = 47, y = 56, z = 12088},
         route = Routes.TO_WILDERNESS_SOUTH_WEST_MINE,
-        ores = {"orichalcite"}
+        ores = {"orichalcite"},
+        oreCoords = {
+            orichalcite = {x = 3018, y = 3592}
+        }
     },
 
     port_phasmatys_south = {
         name = "Port Phasmatys South",
-        region = {x = 57, y = 53, z = 14645},
         route = Routes.TO_PORT_PHASMATYS_SOUTH_MINE,
-        ores = {"phasmatite"}
+        ores = {"phasmatite"},
+        oreCoords = {
+            phasmatite = {x = 3690, y = 3397}
+        }
     },
 
     piscatoris_south = {
         name = "Piscatoris South",
-        region = {x = 36, y = 56, z = 9272},
         route = Routes.TO_PISCATORIS_SOUTH_MINE,
-        ores = {"platinum", "iron"}
+        ores = {"platinum", "iron"},
+        oreCoords = {
+            platinum = {x = 2333, y = 3640},
+            iron = {x = 2338, y = 3643}
+        }
     },
 
     daemonheim_southeast = {
         name = "Daemonheim Southeast",
-        region = {x = 54, y = 57, z = 13881},
         route = Routes.TO_DAEMONHEIM_SOUTHEAST_MINE,
-        ores = {"fractite", "bathus"}
+        ores = {"fractite", "bathus"},
+        oreCoords = {
+            fractite = {x = 3473, y = 3662},
+            bathus = {x = 3473, y = 3664}
+        }
     },
 
     daemonheim_south = {
         name = "Daemonheim South",
-        region = {x = 53, y = 56, z = 13624},
         route = Routes.TO_DAEMONHEIM_SOUTH_MINE,
-        ores = {"kratonium", "novite"}
+        ores = {"kratonium", "novite"},
+        oreCoords = {
+            kratonium = {x = 3443, y = 3642},
+            novite = {x = 3440, y = 3644}
+        }
     },
 
     daemonheim_southwest = {
         name = "Daemonheim Southwest",
-        region = {x = 53, y = 57, z = 13625},
         route = Routes.TO_DAEMONHEIM_SOUTHWEST_MINE,
-        ores = {"argonite", "katagon"}
+        ores = {"argonite", "katagon"},
+        oreCoords = {
+            argonite = {x = 3397, y = 3666},
+            katagon = {x = 3398, y = 3662}
+        }
     },
 
     daemonheim_west = {
         name = "Daemonheim West",
-        region = {x = 53, y = 58, z = 13626},
         route = Routes.TO_DAEMONHEIM_WEST_MINE,
-        ores = {"zephyrium"}
+        ores = {"zephyrium"},
+        oreCoords = {
+            zephyrium = {x = 3393, y = 3714}
+        }
     },
 
     daemonheim_northwest = {
         name = "Daemonheim Northwest",
-        region = {x = 53, y = 58, z = 13626},
         route = Routes.TO_DAEMONHEIM_NORTHWEST_MINE,
-        ores = {"promethium", "fractite"}
+        ores = {"promethium", "fractite"},
+        oreCoords = {
+            promethium = {x = 3401, y = 3757},
+            fractite = {x = 3399, y = 3752}
+        }
     },
 
     daemonheim_east = {
         name = "Daemonheim East",
-        region = {x = 54, y = 58, z = 13882},
         route = Routes.TO_DAEMONHEIM_EAST_MINE,
-        ores = {"marmaros", "gorgonite"}
+        ores = {"marmaros", "gorgonite"},
+        oreCoords = {
+            marmaros = {x = 3503, y = 3732},
+            gorgonite = {x = 3503, y = 3736}
+        }
     },
 
     daemonheim_northeast = {
         name = "Daemonheim Northeast",
-        region = {x = 54, y = 58, z = 13882},
         route = Routes.TO_DAEMONHEIM_NORTHEAST_MINE,
-        ores = {"bathus"}
+        ores = {"bathus"},
+        oreCoords = {
+            bathus = {x = 3478, y = 3771}
+        }
     },
 
     daemonheim_novite_west = {
         name = "Daemonheim Novite West",
-        region = {x = 53, y = 58, z = 13626},
         route = Routes.TO_DAEMONHEIM_NOVITE_WEST_MINE,
-        ores = {"novite"}
+        ores = {"novite"},
+        oreCoords = {
+            novite = {x = 3416, y = 3720}
+        }
     },
 
     daemonheim_resource_dungeon = {
         name = "Daemonheim Resource Dungeon",
-        region = {x = 54, y = 56, z = 13880},
         route = Routes.TO_DAEMONHEIM_RESOURCE_DUNGEON,
         ores = {"promethium"},
+        oreCoords = {
+            promethium = {x = 3494, y = 3633}
+        },
         requiredLevels = {{skill = "DUNGEONEERING", level = 30}}
     }
 }

@@ -46,4 +46,3 @@ function idleHandler.collectGarbage()
 end
 
 return idleHandler
-

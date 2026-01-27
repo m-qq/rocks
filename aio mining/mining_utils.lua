@@ -105,4 +105,206 @@ function Utils.disableAutoRetaliate()
     return true
 end
 
+-- Mining stamina levels (total stamina at each level threshold)
+-- Stamina unlocks at level 15 with 30 base stamina
+local MINING_STAMINA_LEVELS = {
+    {level = 88, stamina = 110},
+    {level = 71, stamina = 100},
+    {level = 67, stamina = 90},
+    {level = 57, stamina = 80},
+    {level = 46, stamina = 70},
+    {level = 33, stamina = 60},
+    {level = 26, stamina = 50},
+    {level = 19, stamina = 40},
+    {level = 15, stamina = 30}
+}
+
+local function getMiningStamina(miningLevel)
+    if miningLevel < 15 then
+        return 0
+    end
+
+    for _, milestone in ipairs(MINING_STAMINA_LEVELS) do
+        if miningLevel >= milestone.level then
+            return milestone.stamina
+        end
+    end
+
+    return 0
+end
+
+function Utils.calculateMaxStamina()
+    local miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
+    local agilityLevel = API.XPLevelTable(API.GetSkillXP("AGILITY"))
+
+    local miningStamina = getMiningStamina(miningLevel)
+    local agilityBonus = agilityLevel
+    local maxStamina = miningStamina + agilityBonus
+
+    return maxStamina
+end
+
+function Utils.getCurrentStamina()
+    return API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS)
+end
+
+function Utils.getStaminaPercent()
+    local current = Utils.getCurrentStamina()
+    local max = Utils.calculateMaxStamina()
+
+    if max == 0 then
+        return 0
+    end
+
+    return (current / max) * 100
+end
+
+function Utils.ensureAtOreLocation(location, selectedOre)
+    if not location.oreCoords or not location.oreCoords[selectedOre] then
+        return true
+    end
+
+    local oreCoord = location.oreCoords[selectedOre]
+    local playerCoord = API.PlayerCoord()
+    local distance = Utils.getDistance(playerCoord.x, playerCoord.y, oreCoord.x, oreCoord.y)
+
+    if distance <= 20 then
+        return true
+    end
+
+    if distance > 50 then
+        API.logWarn("Too far from ore location (distance: " .. math.floor(distance) .. ")")
+        return false
+    end
+
+    API.logInfo("Not at ore yet (distance: " .. math.floor(distance) .. "), walking to ore location...")
+    if not Utils.walkThroughWaypoints({{x = oreCoord.x, y = oreCoord.y}}, 6) then
+        API.logError("Failed to walk to ore location")
+        return false
+    end
+
+    playerCoord = API.PlayerCoord()
+    distance = Utils.getDistance(playerCoord.x, playerCoord.y, oreCoord.x, oreCoord.y)
+    if distance > 20 then
+        API.logError("Still not within 20 units after walking (distance: " .. math.floor(distance) .. ")")
+        return false
+    end
+
+    API.logInfo("Reached ore location")
+    return true
+end
+
+function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankingLocation, playerOreBox, useOreBox, LOCATIONS, ORES, Banking, Routes, Teleports, OreBox, DATA)
+    local miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
+    if miningLevel < 15 then
+        API.logError("Mining level " .. miningLevel .. " is below 15. This script requires level 15+ Mining (stamina system).")
+        return nil
+    end
+
+    local location = LOCATIONS[selectedLocation]
+    if not location then
+        API.logError("Invalid location: " .. selectedLocation)
+        return nil
+    end
+
+    local oreConfig = ORES[selectedOre]
+    if not oreConfig then
+        API.logError("Invalid ore: " .. selectedOre)
+        return nil
+    end
+
+    local oreAvailable = false
+    for _, ore in ipairs(location.ores) do
+        if ore == selectedOre then
+            oreAvailable = true
+            break
+        end
+    end
+    if not oreAvailable then
+        API.logError(oreConfig.name .. " is not available at " .. location.name)
+        local availableAt = {}
+        for locKey, loc in pairs(LOCATIONS) do
+            for _, ore in ipairs(loc.ores) do
+                if ore == selectedOre then
+                    table.insert(availableAt, loc.name)
+                    break
+                end
+            end
+        end
+        if #availableAt > 0 then
+            API.logInfo("Available at: " .. table.concat(availableAt, ", "))
+        end
+        return nil
+    end
+
+    if miningLevel < oreConfig.tier then
+        API.logError("Mining level " .. miningLevel .. " is below required level " .. oreConfig.tier .. " for " .. oreConfig.name)
+        return nil
+    end
+
+    if useOreBox and not OreBox.validate(playerOreBox, oreConfig) then
+        useOreBox = false
+        playerOreBox = nil
+    end
+
+    for _, dungOre in ipairs(DATA.DUNGEONEERING_ORES) do
+        if selectedOre == dungOre then
+            if not Teleports.hasRingOfKinship() then
+                API.logError("Ring of Kinship required for Dungeoneering ores (not found in inventory or equipped)")
+                return nil
+            end
+            break
+        end
+    end
+
+    local bankLocation = Banking.LOCATIONS[selectedBankingLocation]
+    if not bankLocation then
+        API.logError("Invalid banking location: " .. selectedBankingLocation)
+        return nil
+    end
+
+    if selectedBankingLocation == "player_owned_farm" then
+        if API.GetVarbitValue(DATA.VARBIT_IDS.POF_BANK_UNLOCKED) == 0 then
+            API.logError("Player Owned Farm bank chest is not unlocked")
+            return nil
+        end
+    end
+
+    Routes.checkLodestonesForDestination(location)
+    Routes.checkLodestonesForDestination(bankLocation)
+
+    if location.requiredLevels then
+        for _, req in ipairs(location.requiredLevels) do
+            local skillLevel = API.XPLevelTable(API.GetSkillXP(req.skill))
+            if skillLevel < req.level then
+                API.logError(req.skill .. " level " .. skillLevel .. " is below required level " .. req.level .. " for " .. location.name)
+                return nil
+            end
+        end
+    end
+
+    if selectedLocation == "dwarven_mine" or selectedLocation == "dwarven_resource_dungeon" then
+        local combatLevel = Utils.getCombatLevel()
+        if combatLevel < 45 then
+            API.logWarn("Combat level " .. combatLevel .. " is below 45. You may be attacked by scorpions.")
+            if not Utils.disableAutoRetaliate() then
+                return nil
+            end
+        end
+    elseif selectedLocation == "wilderness_south_west" then
+        API.logWarn("Skeletons will attack players of any combat level at this location.")
+        if not Utils.disableAutoRetaliate() then
+            return nil
+        end
+    end
+
+    return {
+        location = location,
+        oreConfig = oreConfig,
+        bankLocation = bankLocation,
+        useOreBox = useOreBox,
+        playerOreBox = playerOreBox
+    }
+end
+
 return Utils

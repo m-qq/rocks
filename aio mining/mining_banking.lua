@@ -187,34 +187,7 @@ function Banking.openBank(bankLocation, bankPin)
     return false
 end
 
-function Banking.depositOreBox(oreBoxId, oreConfig)
-    if not oreBoxId then return true end
-
-    local currentCount = OreBox.getOreCount(oreConfig)
-    if currentCount == 0 then return true end
-
-    API.logInfo("Depositing ore box contents...")
-    API.DoAction_Bank_Inv(oreBoxId, 8, API.OFF_ACT_GeneralInterface_route2)
-    return Utils.waitOrTerminate(function()
-        return OreBox.getOreCount(oreConfig) == 0
-    end, 10, 100, "Failed to deposit ore box contents")
-end
-
-function Banking.depositGeodes()
-    for _, geode in ipairs(DATA.GEODES) do
-        if not depositItem(geode.id, geode.name) then
-            return false
-        end
-    end
-    return true
-end
-
-function Banking.depositOres(oreConfig)
-    if not oreConfig then return true end
-    return depositItem(oreConfig.oreId, oreConfig.name)
-end
-
-function Banking.depositUnknownItems(oreBoxId)
+function Banking.depositAllItems(oreBoxId, oreConfig)
     local keepItems = {
         [DATA.ARCH_JOURNAL_ID] = true,
         [DATA.RING_OF_KINSHIP_ID] = true,
@@ -224,8 +197,20 @@ function Banking.depositUnknownItems(oreBoxId)
         keepItems[oreBoxId] = true
     end
 
-    local inventory = Inventory:GetItems()
+    if oreBoxId and oreConfig then
+        local currentCount = OreBox.getOreCount(oreConfig)
+        if currentCount > 0 then
+            API.logInfo("Depositing ore box contents...")
+            API.DoAction_Bank_Inv(oreBoxId, 8, API.OFF_ACT_GeneralInterface_route2)
+            if not Utils.waitOrTerminate(function()
+                return OreBox.getOreCount(oreConfig) == 0
+            end, 10, 100, "Failed to deposit ore box contents") then
+                return false
+            end
+        end
+    end
 
+    local inventory = Inventory:GetItems()
     for _, item in ipairs(inventory) do
         local itemId = item.id
         if itemId > 0 and not keepItems[itemId] then
@@ -262,7 +247,7 @@ function Banking.depositToMetalBank(metalBankConfig, oreBoxId, oreConfig)
     end, 10, 100, "Failed to deposit to metal bank")
 end
 
-function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfig, bankPin)
+function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfig, bankPin, selectedOre)
     if not bankLocation then
         API.logError("No banking location provided")
         return false
@@ -283,22 +268,8 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
             return false
         end
 
-        if not Banking.depositOreBox(oreBoxId, oreConfig) then
-            API.logWarn("Failed to deposit ore box")
-            return false
-        end
-
-        if not Banking.depositGeodes() then
-            API.logWarn("Failed to deposit geodes")
-            return false
-        end
-
-        if not Banking.depositOres(oreConfig) then
-            API.logWarn("Failed to deposit ores")
-            return false
-        end
-
-        if not Banking.depositUnknownItems(oreBoxId) then
+        if not Banking.depositAllItems(oreBoxId, oreConfig) then
+            API.logWarn("Failed to deposit items")
             return false
         end
     end
@@ -307,9 +278,20 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
 
     if miningLocation then
         API.RandomSleep2(600, 300, 300)
-        if not Routes.travelTo(miningLocation) then
+        if not Routes.travelTo(miningLocation, selectedOre) then
             API.logWarn("Failed to return to mining area")
             return false
+        end
+
+        if miningLocation.oreWaypoints and miningLocation.oreWaypoints[selectedOre] then
+            if not Utils.walkThroughWaypoints(miningLocation.oreWaypoints[selectedOre]) then
+                API.logWarn("Failed to walk through ore waypoints")
+                return false
+            end
+            if not Utils.ensureAtOreLocation(miningLocation, selectedOre) then
+                API.logWarn("Failed to reach ore location after banking")
+                return false
+            end
         end
     end
 
@@ -317,5 +299,3 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
 end
 
 return Banking
-
-

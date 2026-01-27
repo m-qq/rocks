@@ -8,4 +8,6 @@ SM:Dropdown("Banking Location", "BankingLocation", {"archaeology_campus", "artis
 SM:AddTab("Options")
 SM:Checkbox("Use Ore Box", "UseOreBox", true)
 SM:Checkbox("Chase Rockertunities", "ChaseRockertunities", true)
+SM:Checkbox("3-tick Mining", "ThreeTickMining", false)
+SM:Dropdown("Refresh Stamina At", "StaminaRefreshPercent", {"70%", "75%", "80%", "85%", "90%", "95%"}, "85%")
 SM:TextInput("Bank PIN", "BankPin", "")
