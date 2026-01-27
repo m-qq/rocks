@@ -67,7 +67,7 @@ end
 
 local function mineRock(oreConfig)
     API.logInfo("Mining " .. oreConfig.name .. "...")
-    Interact:Object(oreConfig.name, oreConfig.action, 40)
+    Interact:Object(oreConfig.name, oreConfig.action, 20)
     lastMineAttempt = os.time()
     return Utils.waitOrTerminate(function() return isMiningActive() end, 30, 50, "Failed to start mining")
 end
