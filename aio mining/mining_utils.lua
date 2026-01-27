@@ -55,7 +55,7 @@ local function walkToWaypoint(waypoint, threshold)
     API.DoAction_WalkerW(WPOINT.new(randomX, randomY, 0))
 
     local timeout = 15
-    local startTime = os.time()
+    local startTime = nil
 
     while API.Read_LoopyLoop() do
         local coord = API.PlayerCoord()
@@ -64,8 +64,11 @@ local function walkToWaypoint(waypoint, threshold)
         end
 
         if API.ReadPlayerMovin2() then
+            if not startTime then
+                startTime = os.time()
+            end
             startTime = os.time()
-        elseif os.difftime(os.time(), startTime) >= timeout then
+        elseif startTime and os.difftime(os.time(), startTime) >= timeout then
             return false
         end
 
