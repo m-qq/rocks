@@ -40,9 +40,10 @@ function idleHandler.collectGarbage()
     if memDiff >= 1000 then
         collectgarbage("collect")
         local afterMem = collectgarbage("count")
-        API.logInfo(string.format("Garbage cleanup - Memory: %.2f KB (freed: %.2f KB)", afterMem, idleHandler.lastMemoryCheck - afterMem))
+        API.logInfo(string.format("Garbage cleanup - Memory: %.2f KB (freed: %.2f KB)", afterMem, currentMem - afterMem))
         idleHandler.lastMemoryCheck = afterMem
     end
 end
 
 return idleHandler
+
