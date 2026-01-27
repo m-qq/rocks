@@ -218,6 +218,7 @@ function Banking.depositUnknownItems(oreBoxId)
     local keepItems = {
         [DATA.ARCH_JOURNAL_ID] = true,
         [DATA.RING_OF_KINSHIP_ID] = true
+        [39018] = true  -- Senntisten scroll (unbankable)
     }
     if oreBoxId then
         keepItems[oreBoxId] = true
@@ -316,3 +317,4 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
 end
 
 return Banking
+
