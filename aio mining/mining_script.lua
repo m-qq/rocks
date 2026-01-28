@@ -187,26 +187,45 @@ local function dropAllOres()
     end
 
     local oreId = oreConfig.oreId
+    local startCount = Inventory:GetItemAmount(oreId)
     local oreName = oreConfig.name:gsub(" rock$", " ore")
+
+    API.logInfo("Starting to drop " .. startCount .. " ores (ID: " .. oreId .. ")")
+    API.logInfo("Looking for action bar: '" .. oreName .. "'")
 
     local oreAB = API.GetABs_name(oreName, true)
     if oreAB and oreAB.hotkey and oreAB.hotkey > 0 then
-        API.logInfo("Dropping all ores using hotkey...")
+        API.logInfo("Found hotkey " .. oreAB.hotkey .. " - holding to drop all")
         API.KeyboardDown(oreAB.hotkey)
 
-        if not Utils.waitOrTerminate(function()
-            return Inventory:GetItemAmount(oreId) == 0
-        end, 10, 100, "Failed to drop all ores") then
-            API.KeyboardUp(oreAB.hotkey)
-            return
+        local dropStartTime = os.time()
+        while Inventory:GetItemAmount(oreId) > 0 and os.difftime(os.time(), dropStartTime) < 15 do
+            local currentCount = Inventory:GetItemAmount(oreId)
+            API.logInfo("Dropping... " .. currentCount .. " remaining")
+            API.RandomSleep2(500, 200, 200)
         end
 
         API.KeyboardUp(oreAB.hotkey)
-        API.logInfo("Finished dropping ores")
+        local finalCount = Inventory:GetItemAmount(oreId)
+        API.logInfo("Released key. Dropped " .. (startCount - finalCount) .. " ores, " .. finalCount .. " remaining")
+
+        if finalCount > 0 then
+            API.logWarn("Failed to drop all ores via hotkey, switching to manual drop")
+            while Inventory:GetItemAmount(oreId) > 0 do
+                local countBefore = Inventory:GetItemAmount(oreId)
+                Inventory:Drop(oreId)
+                if not Utils.waitOrTerminate(function()
+                    return Inventory:GetItemAmount(oreId) < countBefore
+                end, 3, 50, "Failed to drop ore") then
+                    break
+                end
+            end
+        end
     else
-        API.logInfo("Dropping all ores (no hotkey)...")
+        API.logInfo("No hotkey found - dropping manually one by one")
         while Inventory:GetItemAmount(oreId) > 0 do
             local countBefore = Inventory:GetItemAmount(oreId)
+            API.logInfo("Dropping ore... " .. countBefore .. " remaining")
             Inventory:Drop(oreId)
 
             if not Utils.waitOrTerminate(function()
@@ -215,7 +234,13 @@ local function dropAllOres()
                 break
             end
         end
-        API.logInfo("Finished dropping ores")
+    end
+
+    local endCount = Inventory:GetItemAmount(oreId)
+    if endCount == 0 then
+        API.logInfo("Successfully dropped all " .. startCount .. " ores")
+    else
+        API.logError("Failed to drop all ores: started with " .. startCount .. ", still have " .. endCount)
     end
 end
 
