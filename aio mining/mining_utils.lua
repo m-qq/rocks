@@ -202,7 +202,7 @@ function Utils.ensureAtOreLocation(location, selectedOre)
     return true
 end
 
-function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankingLocation, playerOreBox, useOreBox, LOCATIONS, ORES, Banking, Routes, Teleports, OreBox, DATA)
+function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankingLocation, playerOreBox, useOreBox, LOCATIONS, ORES, Banking, Routes, Teleports, OreBox, DATA, dropOres)
     local miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
     if miningLevel < 15 then
         API.logError("Mining level " .. miningLevel .. " is below 15. This script requires level 15+ Mining (stamina system).")
@@ -265,13 +265,16 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
         end
     end
 
-    local bankLocation = Banking.LOCATIONS[selectedBankingLocation]
-    if not bankLocation then
-        API.logError("Invalid banking location: " .. selectedBankingLocation)
-        return nil
+    local bankLocation = nil
+    if not dropOres then
+        bankLocation = Banking.LOCATIONS[selectedBankingLocation]
+        if not bankLocation then
+            API.logError("Invalid banking location: " .. selectedBankingLocation)
+            return nil
+        end
     end
 
-    if selectedBankingLocation == "player_owned_farm" then
+    if not dropOres and selectedBankingLocation == "player_owned_farm" then
         if API.GetVarbitValue(DATA.VARBIT_IDS.POF_BANK_UNLOCKED) == 0 then
             API.logError("Player Owned Farm bank chest is not unlocked")
             return nil
@@ -279,7 +282,9 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
     end
 
     Routes.checkLodestonesForDestination(location)
-    Routes.checkLodestonesForDestination(bankLocation)
+    if not dropOres then
+        Routes.checkLodestonesForDestination(bankLocation)
+    end
 
     if location.requiredLevels then
         for _, req in ipairs(location.requiredLevels) do

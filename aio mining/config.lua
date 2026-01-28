@@ -6,6 +6,7 @@ SM:Dropdown("Ore", "Ore", {"copper", "tin", "iron", "coal", "silver", "mithril",
 SM:Dropdown("Banking Location", "BankingLocation", {"archaeology_campus", "artisans_guild_bank", "artisans_guild_furnace", "daemonheim_banker", "edgeville", "falador_east", "falador_west", "fort_forinthry", "fort_forinthry_furnace", "memorial_to_guthix", "player_owned_farm", "wilderness_pirates_hideout_anvil"}, "archaeology_campus")
 
 SM:AddTab("Options")
+SM:Checkbox("Drop Ores", "DropOres", false)
 SM:Checkbox("Use Ore Box", "UseOreBox", true)
 SM:Checkbox("Chase Rockertunities", "ChaseRockertunities", true)
 SM:Checkbox("3-tick Mining", "ThreeTickMining", false)

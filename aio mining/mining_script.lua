@@ -16,11 +16,16 @@ API.ClearLog()
 local selectedLocation = CONFIG.MiningLocation
 local selectedOre = CONFIG.Ore
 local selectedBankingLocation = CONFIG.BankingLocation
+local dropOres = Utils.toBool(CONFIG.DropOres)
 local useOreBox = Utils.toBool(CONFIG.UseOreBox)
 local chaseRockertunities = Utils.toBool(CONFIG.ChaseRockertunities)
 local threeTickMining = Utils.toBool(CONFIG.ThreeTickMining)
 local bankPin = CONFIG.BankPin or ""
 local staminaRefreshPercent = tonumber(CONFIG.StaminaRefreshPercent:match("%d+")) or 85
+
+if dropOres then
+    useOreBox = false
+end
 
 local playerOreBox = nil
 local lastInteractTime = 0
@@ -137,7 +142,8 @@ end
 local validated = Utils.validateMiningSetup(
     selectedLocation, selectedOre, selectedBankingLocation,
     playerOreBox, useOreBox,
-    LOCATIONS, ORES, Banking, Routes, Teleports, OreBox, DATA
+    LOCATIONS, ORES, Banking, Routes, Teleports, OreBox, DATA,
+    dropOres
 )
 
 if not validated then
@@ -153,9 +159,46 @@ playerOreBox = validated.playerOreBox
 local oreBoxCapacity = playerOreBox and OreBox.getCapacity(playerOreBox, oreConfig) or 0
 
 local function needsBanking()
+    if dropOres then
+        return false
+    end
     local invFull = Inventory:IsFull()
     local boxFull = OreBox.isFull(playerOreBox, oreConfig)
     return invFull and (not useOreBox or boxFull)
+end
+
+local function dropAllOres()
+    local oreId = oreConfig.oreId
+    local oreName = oreConfig.name:gsub(" rock$", " ore")
+
+    local oreAB = API.GetABs_name(oreName, true)
+    if oreAB and oreAB.hotkey and oreAB.hotkey > 0 then
+        API.logInfo("Dropping all ores using hotkey...")
+        API.KeyboardDown(oreAB.hotkey)
+
+        if not Utils.waitOrTerminate(function()
+            return Inventory:GetItemAmount(oreId) == 0
+        end, 10, 100, "Failed to drop all ores") then
+            API.KeyboardUp(oreAB.hotkey)
+            return
+        end
+
+        API.KeyboardUp(oreAB.hotkey)
+        API.logInfo("Finished dropping ores")
+    else
+        API.logInfo("Dropping all ores (no hotkey)...")
+        while Inventory:GetItemAmount(oreId) > 0 do
+            local countBefore = Inventory:GetItemAmount(oreId)
+            Inventory:Drop(oreId)
+
+            if not Utils.waitOrTerminate(function()
+                return Inventory:GetItemAmount(oreId) < countBefore
+            end, 3, 50, "Failed to drop ore") then
+                break
+            end
+        end
+        API.logInfo("Finished dropping ores")
+    end
 end
 
 local function drawStats()
@@ -166,10 +209,14 @@ local function drawStats()
         {"Anti-idle in:", Utils.formatTime(idleHandler.getTimeUntilNextIdle())},
         {""},
         {"Location:", location.name},
-        {"Banking:", bankLocation.name},
         {"Ore:", oreName},
         {"Stamina:", Utils.getCurrentStamina() .. "/" .. Utils.calculateMaxStamina() .. " (" .. string.format("%.1f%%", Utils.getStaminaPercent()) .. ")"}
     }
+    if dropOres then
+        table.insert(statsTable, {"Mode:", "Drop"})
+    else
+        table.insert(statsTable, {"Banking:", bankLocation.name})
+    end
     if threeTickMining then
         table.insert(statsTable, {"Mode:", "3-tick"})
     end
@@ -181,7 +228,10 @@ end
 
 API.logInfo("Location: " .. location.name)
 API.logInfo("Ore: " .. oreConfig.name)
-API.logInfo("Banking: " .. bankLocation.name)
+if not dropOres then
+    API.logInfo("Banking: " .. bankLocation.name)
+end
+API.logInfo("Drop Ores: " .. tostring(dropOres))
 API.logInfo("Use Ore Box: " .. tostring(useOreBox))
 API.logInfo("3-tick Mining: " .. tostring(threeTickMining))
 
@@ -190,7 +240,9 @@ while API.Read_LoopyLoop() do
     idleHandler.collectGarbage()
     drawStats()
 
-    if needsBanking() then
+    if dropOres and Inventory:IsFull() then
+        dropAllOres()
+    elseif needsBanking() then
         if not Banking.performBanking(bankLocation, location, playerOreBox, oreConfig, bankPin, selectedOre) then
             break
         end
