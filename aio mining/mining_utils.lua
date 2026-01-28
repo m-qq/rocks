@@ -204,10 +204,6 @@ end
 
 function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankingLocation, playerOreBox, useOreBox, LOCATIONS, ORES, Banking, Routes, Teleports, OreBox, DATA, dropOres)
     local miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
-    if miningLevel < 15 then
-        API.logError("Mining level " .. miningLevel .. " is below 15. This script requires level 15+ Mining (stamina system).")
-        return nil
-    end
 
     local location = LOCATIONS[selectedLocation]
     if not location then

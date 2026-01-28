@@ -31,8 +31,12 @@ local playerOreBox = nil
 local lastInteractTime = 0
 local lastInteractTick = 0
 local nextTickTarget = 0
+local miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
 
 local function isMiningActive()
+    if miningLevel < 15 then
+        return API.ReadPlayerAnim() ~= 0
+    end
     return API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS) > 0 and API.ReadPlayerAnim() ~= 0
 end
 
@@ -115,7 +119,11 @@ local function mineRock(oreConfig)
     API.logInfo("Mining " .. oreConfig.name .. "...")
     Interact:Object(oreConfig.name, oreConfig.action, 25)
     lastInteractTime = os.time()
-    return Utils.waitOrTerminate(function() return isMiningActive() end, 30, 50, "Failed to start mining")
+    if not Utils.waitOrTerminate(function() return isMiningActive() end, 30, 50, "Failed to start mining") then
+        return false
+    end
+    API.RandomSleep2(300, 150, 100)
+    return true
 end
 
 local function threeTickInteract(oreConfig)
@@ -209,9 +217,11 @@ local function drawStats()
         {"Anti-idle in:", Utils.formatTime(idleHandler.getTimeUntilNextIdle())},
         {""},
         {"Location:", location.name},
-        {"Ore:", oreName},
-        {"Stamina:", Utils.getCurrentStamina() .. "/" .. Utils.calculateMaxStamina() .. " (" .. string.format("%.1f%%", Utils.getStaminaPercent()) .. ")"}
+        {"Ore:", oreName}
     }
+    if miningLevel >= 15 then
+        table.insert(statsTable, {"Stamina:", Utils.getCurrentStamina() .. "/" .. Utils.calculateMaxStamina() .. " (" .. string.format("%.1f%%", Utils.getStaminaPercent()) .. ")"})
+    end
     if dropOres then
         table.insert(statsTable, {"Mode:", "Drop"})
     else
@@ -238,6 +248,7 @@ API.logInfo("3-tick Mining: " .. tostring(threeTickMining))
 while API.Read_LoopyLoop() do
     if not idleHandler.check() then break end
     idleHandler.collectGarbage()
+    miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
     drawStats()
 
     if dropOres and Inventory:IsFull() then
@@ -249,7 +260,6 @@ while API.Read_LoopyLoop() do
     elseif isNearOreLocation(location, selectedOre) then
         local invFull = Inventory:IsFull()
         local rockertunity = chaseRockertunities and findRockertunity(oreConfig) or nil
-        local staminaPercent = Utils.getStaminaPercent()
 
         if invFull and useOreBox and playerOreBox then
             OreBox.fill(playerOreBox)
@@ -263,7 +273,7 @@ while API.Read_LoopyLoop() do
             end
         elseif rockertunity and canInteract() then
             if not mineRockertunity(oreConfig, rockertunity) then break end
-        elseif staminaPercent >= staminaRefreshPercent and canInteract() then
+        elseif miningLevel >= 15 and Utils.getStaminaPercent() >= staminaRefreshPercent and canInteract() then
             if not mineRock(oreConfig) then break end
         elseif not isMiningActive() and canInteract() then
             if not mineRock(oreConfig) then break end
