@@ -176,6 +176,16 @@ local function needsBanking()
 end
 
 local function dropAllOres()
+    if isMiningActive() then
+        API.logInfo("Waiting for mining to stop before dropping...")
+        if not Utils.waitOrTerminate(function()
+            return not isMiningActive()
+        end, 10, 100, "Mining did not stop") then
+            return
+        end
+        API.RandomSleep2(300, 150, 100)
+    end
+
     local oreId = oreConfig.oreId
     local oreName = oreConfig.name:gsub(" rock$", " ore")
 
