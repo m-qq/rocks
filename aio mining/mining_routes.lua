@@ -890,9 +890,14 @@ Routes.TO_WILDERNESS_SOUTH_WEST_MINE = {
     },
     {
         action = { interact = { object = "Wilderness wall", action = "Cross" } },
-        wait = { anim = 0, minY = 3523 },
-        timeout = 20,
-        desc = "Cross Wilderness wall"
+        wait = { anim = 6703 },
+        timeout = 15,
+        desc = "Cross Wilderness wall - animation start"
+    },
+    {
+        wait = { anim = 0 },
+        timeout = 15,
+        desc = "Cross Wilderness wall - animation end"
     },
     {
         action = { walk = { waypoints = {{x = 3048, y = 3552}, {x = 3044, y = 3584}, {x = 3018, y = 3592}} } },
@@ -912,9 +917,14 @@ Routes.TO_WILDERNESS_SOUTH_MINE = {
     },
     {
         action = { interact = { object = "Wilderness wall", action = "Cross" } },
-        wait = { anim = 0, minY = 3523 },
-        timeout = 20,
-        desc = "Cross Wilderness wall"
+        wait = { anim = 6703 },
+        timeout = 15,
+        desc = "Cross Wilderness wall - animation start"
+    },
+    {
+        wait = { anim = 0 },
+        timeout = 15,
+        desc = "Cross Wilderness wall - animation end"
     },
     {
         action = { walk = { waypoints = {{x = 3093, y = 3548}, {x = 3103, y = 3567}} } },
