@@ -294,7 +294,7 @@ while API.Read_LoopyLoop() do
         end
     elseif isNearOreLocation(location, selectedOre) then
         local invFull = Inventory:IsFull()
-        local rockertunity = chaseRockertunities and findRockertunity(oreConfig) or nil
+        local rockertunity = chaseRockertunities and not invFull and findRockertunity(oreConfig) or nil
 
         if invFull and useOreBox and playerOreBox then
             OreBox.fill(playerOreBox)
