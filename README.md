@@ -1,4 +1,4 @@
 mining things
 
 TODO:
-drop option
+idk
