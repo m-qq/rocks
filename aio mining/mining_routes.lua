@@ -138,7 +138,6 @@ local function executeStep(step)
 
                 if step.retryOnAnim then
                     -- Pattern: interact, wait for success coord OR fail anim, retry on fail
-                    local waitStart = os.time()
                     while os.time() - startTime < timeout do
                         if checkWaitCondition(step.wait) then
                             return true
@@ -149,6 +148,7 @@ local function executeStep(step)
                                 if API.ReadPlayerAnim() == 0 then break end
                                 API.RandomSleep2(100, 50, 50)
                             end
+                            startTime = os.time()
                             break
                         end
                         API.RandomSleep2(100, 50, 50)
