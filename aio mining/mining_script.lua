@@ -1,5 +1,3 @@
--- version 1
-
 local API = require("api")
 local idleHandler = require("aio mining/idle_handler")
 local ORES = require("aio mining/mining_ores")
@@ -313,9 +311,9 @@ while API.Read_LoopyLoop() do
             end
         elseif rockertunity and canInteract() then
             if not mineRockertunity(ore, rockertunity) then break end
-        elseif not isMiningActive() and canInteract() then
+        elseif canInteract() then
             local staminaPercent = Utils.getStaminaPercent()
-            if state.miningLevel < 15 or staminaPercent == 0 or staminaPercent >= cfg.staminaRefreshPercent then
+            if state.miningLevel < 15 or not isMiningActive() or staminaPercent >= cfg.staminaRefreshPercent then
                 if not mineRock(ore) then break end
             end
         end
