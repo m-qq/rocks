@@ -80,7 +80,12 @@ function OreBox.fill(boxId)
         return false
     end
     if not Inventory:IsOpen() then
-        API.DoAction_Interface(0xc2, 0xffffffff, 1, 1431, 0, 9, API.OFF_ACT_GeneralInterface_route)
+        local inventoryVarbit = API.GetVarbitValue(21816)
+        if inventoryVarbit == 1 then
+            API.DoAction_Interface(0xc2, 0xffffffff, 1, 1431, 0, 9, API.OFF_ACT_GeneralInterface_route)
+        elseif inventoryVarbit == 0 then
+            API.DoAction_Interface(0xc2, 0xffffffff, 1, 1432, 5, 1, API.OFF_ACT_GeneralInterface_route)
+        end
         if not Utils.waitOrTerminate(function()
             return Inventory:IsOpen()
         end, 10, 100, "Failed to open inventory") then
