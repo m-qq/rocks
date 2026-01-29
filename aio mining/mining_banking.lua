@@ -259,6 +259,12 @@ function Banking.depositAllItems(oreBoxId, oreConfig)
         [DATA.RING_OF_KINSHIP_ID] = true,
         [39018] = true  -- Senntisten scroll (unbankable)
     }
+    for _, id in ipairs(DATA.SLAYER_CAPE_IDS) do
+        keepItems[id] = true
+    end
+    for _, id in ipairs(DATA.DUNGEONEERING_CAPE_IDS) do
+        keepItems[id] = true
+    end
     if oreBoxId then
         keepItems[oreBoxId] = true
     end
