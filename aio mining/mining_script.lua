@@ -1,3 +1,5 @@
+-- version 1
+
 local API = require("api")
 local idleHandler = require("aio mining/idle_handler")
 local ORES = require("aio mining/mining_ores")
