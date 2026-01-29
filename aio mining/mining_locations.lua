@@ -10,6 +10,19 @@ local MINING_LOCATIONS = {
         }
     },
 
+    anachronia_swamp = {
+        name = "Anachronia Swamp",
+        route = Routes.TO_ANACHRONIA_SWAMP,
+        ores = {"dark_animica"},
+        oreCoords = {
+            dark_animica = {x = 5616, y = 2172}
+        },
+        requiredLevels = {
+            {skill = "SLAYER", level = 99},
+            {skill = "COMBAT", level = 120}
+        }
+    },
+
     anachronia_sw = {
         name = "Anachronia South-West",
         route = Routes.TO_ANACHRONIA_SW,
@@ -21,7 +34,11 @@ local MINING_LOCATIONS = {
 
     al_kharid = {
         name = "Al Kharid",
-        route = Routes.TO_AL_KHARID_MINE,
+        routeOptions = {
+            { condition = { dungeoneeringCape = true }, route = Routes.TO_AL_KHARID_MINE_VIA_DUNGEONEERING_CAPE },
+            { condition = { archJournal = true }, route = Routes.TO_AL_KHARID_MINE_VIA_ARCH_JOURNAL },
+            { route = Routes.TO_AL_KHARID_MINE }
+        },
         ores = {"gold", "silver"},
         oreCoords = {
             gold = {x = 3302, y = 3290},
@@ -31,7 +48,11 @@ local MINING_LOCATIONS = {
 
     al_kharid_resource_dungeon = {
         name = "Al Kharid Resource Dungeon",
-        route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON,
+        routeOptions = {
+            { condition = { dungeoneeringCape = true }, route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON_VIA_DUNGEONEERING_CAPE },
+            { condition = { archJournal = true }, route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON_VIA_ARCH_JOURNAL },
+            { route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON }
+        },
         ores = {"drakolith", "necrite"},
         oreCoords = {
             drakolith = {x = 1175, y = 4516},
@@ -54,7 +75,11 @@ local MINING_LOCATIONS = {
 
     varrock_se = {
         name = "Varrock South-East",
-        route = Routes.TO_VARROCK_SE_MINE,
+        skip_if = { nearCoord = {x = 3287, y = 3365} },
+        routeOptions = {
+            { condition = { archJournal = true }, route = Routes.TO_VARROCK_SE_MINE_VIA_ARCH_JOURNAL },
+            { route = Routes.TO_VARROCK_SE_MINE }
+        },
         ores = {"copper", "tin", "mithril", "adamant"},
         oreCoords = {
             copper = {x = 3286, y = 3369},
@@ -96,9 +121,32 @@ local MINING_LOCATIONS = {
         }
     },
 
+    karamja_volcano = {
+        name = "Karamja Volcano",
+        route = Routes.TO_KARAMJA_VOLCANO_MINE,
+        ores = {"runite"},
+        oreCoords = {
+            runite = {x = 2860, y = 9577}
+        },
+        requiredLevels = {{skill = "DUNGEONEERING", level = 99}},
+        danger = {minCombat = 31}
+    },
+
+    lletya = {
+        name = "Lletya",
+        route = Routes.TO_LLETYA_MINE,
+        ores = {"light_animica"},
+        oreCoords = {
+            light_animica = {x = 2279, y = 3160}
+        }
+    },
+
     dwarven_mine = {
         name = "Dwarven Mine",
-        route = Routes.TO_DWARVEN_MINE,
+        routeOptions = {
+            { condition = { dungeoneeringCape = true }, route = Routes.TO_DWARVEN_MINE_VIA_DUNGEONEERING_CAPE },
+            { route = Routes.TO_DWARVEN_MINE }
+        },
         ores = {"iron", "coal", "luminite"},
         oreCoords = {
             iron = {x = 3050, y = 9782},
@@ -109,12 +157,16 @@ local MINING_LOCATIONS = {
             iron = {{x = 3049, y = 9782}},
             coal = {{x = 3043, y = 9791}, {x = 3051, y = 9815}},
             luminite = {{x = 3038, y = 9763}}
-        }
+        },
+        danger = {minCombat = 45}
     },
 
     dwarven_resource_dungeon = {
         name = "Dwarven Resource Dungeon",
-        route = Routes.TO_DWARVEN_RESOURCE_DUNGEON,
+        routeOptions = {
+            { condition = { dungeoneeringCape = true }, route = Routes.TO_DWARVEN_RESOURCE_DUNGEON_VIA_DUNGEONEERING_CAPE },
+            { route = Routes.TO_DWARVEN_RESOURCE_DUNGEON }
+        },
         ores = {"mithril", "gold"},
         oreCoords = {
             mithril = {x = 1047, y = 4577},
@@ -123,12 +175,14 @@ local MINING_LOCATIONS = {
         oreWaypoints = {
             gold = {{x = 1064, y = 4573}}
         },
-        requiredLevels = {{skill = "DUNGEONEERING", level = 15}}
+        requiredLevels = {{skill = "DUNGEONEERING", level = 15}},
+        danger = {minCombat = 45}
     },
 
     mining_guild = {
         name = "Mining Guild",
         routeOptions = {
+            { condition = { dungeoneeringCape = true }, route = Routes.TO_MINING_GUILD_VIA_DUNGEONEERING_CAPE },
             { condition = { nearCoord = {x = 3061, y = 3340} }, route = Routes.TO_MINING_GUILD_FROM_ARTISANS_GUILD_BANK },
             { condition = { region = {x = 47, y = 52, z = 12084} }, route = Routes.TO_MINING_GUILD_FROM_ARTISANS_WORKSHOP },
             { route = Routes.TO_MINING_GUILD }
@@ -150,6 +204,7 @@ local MINING_LOCATIONS = {
     mining_guild_resource_dungeon = {
         name = "Mining Guild Resource Dungeon",
         routeOptions = {
+            { condition = { dungeoneeringCape = true }, route = Routes.TO_MINING_GUILD_RESOURCE_DUNGEON_VIA_DUNGEONEERING_CAPE },
             { condition = { nearCoord = {x = 3061, y = 3340} }, route = Routes.TO_MINING_GUILD_RESOURCE_DUNGEON_FROM_ARTISANS_GUILD_BANK },
             { condition = { region = {x = 47, y = 52, z = 12084} }, route = Routes.TO_MINING_GUILD_RESOURCE_DUNGEON_FROM_ARTISANS_WORKSHOP },
             { route = Routes.TO_MINING_GUILD_RESOURCE_DUNGEON }
@@ -185,7 +240,10 @@ local MINING_LOCATIONS = {
 
     wilderness_pirates_hideout = {
         name = "Wilderness Pirates Hideout",
-        route = Routes.TO_WILDERNESS_PIRATES_HIDEOUT,
+        routeOptions = {
+            { condition = { slayerCape = true }, route = Routes.TO_WILDERNESS_PIRATES_HIDEOUT_VIA_SLAYER_CAPE },
+            { route = Routes.TO_WILDERNESS_PIRATES_HIDEOUT }
+        },
         ores = {"banite"},
         oreCoords = {
             banite = {x = 3059, y = 3946}
@@ -207,7 +265,8 @@ local MINING_LOCATIONS = {
         ores = {"orichalcite"},
         oreCoords = {
             orichalcite = {x = 3018, y = 3592}
-        }
+        },
+        danger = {}
     },
 
     port_phasmatys_south = {
@@ -251,7 +310,10 @@ local MINING_LOCATIONS = {
 
     daemonheim_southwest = {
         name = "Daemonheim Southwest",
-        route = Routes.TO_DAEMONHEIM_SOUTHWEST_MINE,
+        routeOptions = {
+            { condition = { dungeoneeringCape = true }, route = Routes.TO_DAEMONHEIM_SOUTHWEST_MINE_VIA_DUNGEONEERING_CAPE },
+            { route = Routes.TO_DAEMONHEIM_SOUTHWEST_MINE }
+        },
         ores = {"argonite", "katagon"},
         oreCoords = {
             argonite = {x = 3397, y = 3666},
@@ -308,7 +370,10 @@ local MINING_LOCATIONS = {
 
     daemonheim_resource_dungeon = {
         name = "Daemonheim Resource Dungeon",
-        route = Routes.TO_DAEMONHEIM_RESOURCE_DUNGEON,
+        routeOptions = {
+            { condition = { dungeoneeringCape = true }, route = Routes.TO_DAEMONHEIM_RESOURCE_DUNGEON_VIA_DUNGEONEERING_CAPE },
+            { route = Routes.TO_DAEMONHEIM_RESOURCE_DUNGEON }
+        },
         ores = {"promethium"},
         oreCoords = {
             promethium = {x = 3494, y = 3633}

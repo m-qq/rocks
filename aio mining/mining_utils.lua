@@ -102,6 +102,60 @@ function Utils.getCombatLevel()
     return API.VB_FindPSettinOrder(DATA.VARBIT_IDS.COMBAT_LEVEL).state
 end
 
+local ROUTE_CONDITION_CHECKS = {
+    dungeoneeringCape = { skill = "DUNGEONEERING", capeName = "Dungeoneering cape" },
+    slayerCape = { skill = "SLAYER", capeName = "Slayer cape" },
+    archJournal = { itemName = "Archaeology journal" }
+}
+
+function Utils.validateRouteOptions(location)
+    if not location.routeOptions then return true end
+
+    local Teleports = require("aio mining/mining_teleports")
+    local checkFns = {
+        dungeoneeringCape = Teleports.hasDungeoneeringCape,
+        slayerCape = Teleports.hasSlayerCape,
+        archJournal = Teleports.hasArchJournal
+    }
+
+    local bestAvailable = nil
+    for _, option in ipairs(location.routeOptions) do
+        if not option.condition then break end
+        for key, _ in pairs(option.condition) do
+            local check = ROUTE_CONDITION_CHECKS[key]
+            if not check then goto continue end
+
+            local hasFn = checkFns[key]
+            if hasFn and hasFn() then
+                return true
+            end
+
+            if check.skill then
+                local skillLevel = API.XPLevelTable(API.GetSkillXP(check.skill))
+                if skillLevel >= 99 then
+                    API.logError(check.skill:sub(1,1) .. check.skill:sub(2):lower() .. " level " .. skillLevel .. " detected but no " .. check.capeName .. " equipped.")
+                    API.logError("A more efficient route is available using the " .. check.capeName .. ".")
+                    API.logError("Please equip a " .. check.capeName .. " and restart the script.")
+                    API.Write_LoopyLoop(false)
+                    return nil
+                end
+            end
+
+            if check.itemName and not bestAvailable then
+                bestAvailable = check.itemName
+            end
+
+            ::continue::
+        end
+    end
+
+    if bestAvailable then
+        API.logWarn("No " .. bestAvailable .. " found. You can get to the mine quicker using one.")
+    end
+
+    return true
+end
+
 function Utils.disableAutoRetaliate()
     if API.GetVarbitValue(DATA.VARBIT_IDS.AUTO_RETALIATE) == 0 then
         API.logInfo("Disabling auto-retaliate...")
@@ -202,7 +256,13 @@ function Utils.ensureAtOreLocation(location, selectedOre)
     return true
 end
 
-function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankingLocation, playerOreBox, useOreBox, LOCATIONS, ORES, Banking, Routes, Teleports, OreBox, DATA, dropOres)
+function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankingLocation, playerOreBox, useOreBox, dropOres)
+    local LOCATIONS = require("aio mining/mining_locations")
+    local ORES = require("aio mining/mining_ores")
+    local Banking = require("aio mining/mining_banking")
+    local Routes = require("aio mining/mining_routes")
+    local Teleports = require("aio mining/mining_teleports")
+    local OreBox = require("aio mining/mining_orebox")
     local miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
 
     local location = LOCATIONS[selectedLocation]
@@ -277,6 +337,49 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
         end
     end
 
+    if not dropOres and selectedBankingLocation == "max_guild" then
+        local allSkills = {
+            "ATTACK", "STRENGTH", "RANGED", "MAGIC", "DEFENCE", "CONSTITUTION",
+            "PRAYER", "SUMMONING", "DUNGEONEERING", "AGILITY", "THIEVING", "SLAYER",
+            "HUNTER", "SMITHING", "CRAFTING", "FLETCHING", "HERBLORE", "RUNECRAFTING",
+            "COOKING", "CONSTRUCTION", "FIREMAKING", "WOODCUTTING", "FARMING",
+            "FISHING", "MINING", "DIVINATION", "INVENTION", "ARCHAEOLOGY", "NECROMANCY"
+        }
+        for _, skill in ipairs(allSkills) do
+            local level = API.XPLevelTable(API.GetSkillXP(skill))
+            if level < 99 then
+                API.logError("Max Guild requires all skills at level 99. " .. skill .. " is level " .. level)
+                return nil
+            end
+        end
+
+    end
+
+    if not dropOres and selectedBankingLocation == "deep_sea_fishing_hub" then
+        if not Teleports.hasGraceOfTheElves() then
+            API.logError("Grace of the Elves necklace is not equipped")
+            return nil
+        end
+        if API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_2) ~= 16 and API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_1) ~= 16 then
+            API.logError("Deep Sea Fishing Hub is not set as a Max Guild portal destination. Please redirect a Max Guild portal to Deep Sea Fishing Hub.")
+            return nil
+        end
+    end
+
+    if not dropOres and selectedBankingLocation == "wars_retreat" then
+        if API.GetVarbitValue(DATA.VARBIT_IDS.WARS_RETREAT_UNLOCKED) ~= 1 then
+            API.logError("War's Retreat teleport is not unlocked")
+            return nil
+        end
+    end
+
+    if not Routes.validateLodestonesForDestination(location) then
+        return nil
+    end
+    if not dropOres and not Routes.validateLodestonesForDestination(bankLocation) then
+        return nil
+    end
+
     Routes.checkLodestonesForDestination(location)
     if not dropOres then
         Routes.checkLodestonesForDestination(bankLocation)
@@ -284,7 +387,7 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
 
     if location.requiredLevels then
         for _, req in ipairs(location.requiredLevels) do
-            local skillLevel = API.XPLevelTable(API.GetSkillXP(req.skill))
+            local skillLevel = req.skill == "COMBAT" and Utils.getCombatLevel() or API.XPLevelTable(API.GetSkillXP(req.skill))
             if skillLevel < req.level then
                 API.logError(req.skill .. " level " .. skillLevel .. " is below required level " .. req.level .. " for " .. location.name)
                 return nil
@@ -292,18 +395,16 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
         end
     end
 
-    if selectedLocation == "dwarven_mine" or selectedLocation == "dwarven_resource_dungeon" then
+    local routeValid = Utils.validateRouteOptions(location)
+    if routeValid == nil then return nil end
+
+    if location.danger then
         local combatLevel = Utils.getCombatLevel()
-        if combatLevel < 45 then
-            API.logWarn("Combat level " .. combatLevel .. " is below 45. You may be attacked by scorpions.")
+        if not location.danger.minCombat or combatLevel < location.danger.minCombat then
+            API.logWarn("You may be attacked at this location. Disabling auto-retaliate.")
             if not Utils.disableAutoRetaliate() then
                 return nil
             end
-        end
-    elseif selectedLocation == "wilderness_south_west" then
-        API.logWarn("Skeletons will attack players of any combat level at this location.")
-        if not Utils.disableAutoRetaliate() then
-            return nil
         end
     end
 

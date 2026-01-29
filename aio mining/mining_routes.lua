@@ -110,7 +110,7 @@ local function executeStep(step)
                 return false
             end
         elseif step.action.teleport then
-            if not Teleports[step.action.teleport]() then
+            if not Teleports[step.action.teleport](step.action.teleportArg) then
                 return false
             end
         elseif step.action.interact then
@@ -131,16 +131,50 @@ local function executeStep(step)
         if step.retryAction and step.action and step.action.interact then
             local timeout = step.timeout or 20
             local startTime = os.time()
-            local lastRetry = os.time()
             while os.time() - startTime < timeout do
                 if checkWaitCondition(step.wait) then
                     return true
                 end
-                if os.time() - lastRetry >= 3 and API.ReadPlayerAnim() == 0 then
-                    local i = step.action.interact
-                    Interact:Object(i.object, i.action, i.tile, i.range or 40)
-                    lastRetry = os.time()
+
+                if step.retryOnAnim then
+                    -- Pattern: interact, wait for success coord OR fail anim, retry on fail
+                    local waitStart = os.time()
+                    while os.time() - startTime < timeout do
+                        if checkWaitCondition(step.wait) then
+                            return true
+                        end
+                        if API.ReadPlayerAnim() == step.retryOnAnim then
+                            API.logInfo("Route: Failed attempt, retrying...")
+                            while os.time() - startTime < timeout do
+                                if API.ReadPlayerAnim() == 0 then break end
+                                API.RandomSleep2(100, 50, 50)
+                            end
+                            break
+                        end
+                        API.RandomSleep2(100, 50, 50)
+                    end
+                    if os.time() - startTime < timeout then
+                        local i = step.action.interact
+                        Interact:Object(i.object, i.action, i.tile, i.range or 40)
+                    end
+                else
+                    -- Pattern: interact, wait for objectState change or anim cycle
+                    local waitStart = os.time()
+                    while os.time() - startTime < timeout do
+                        if checkWaitCondition(step.wait) then
+                            return true
+                        end
+                        if os.time() - waitStart >= 3 and API.ReadPlayerAnim() == 0 then
+                            break
+                        end
+                        API.RandomSleep2(100, 50, 50)
+                    end
+                    if os.time() - startTime < timeout then
+                        local i = step.action.interact
+                        Interact:Object(i.object, i.action, i.tile, i.range or 40)
+                    end
                 end
+
                 API.RandomSleep2(100, 50, 50)
             end
             API.logError("Failed: " .. desc)
@@ -183,6 +217,37 @@ function Routes.checkLodestones(route)
     end
 end
 
+function Routes.validateLodestonesUnlocked(route)
+    if not route then return true end
+    for _, step in ipairs(route) do
+        if step.action and step.action.lodestone then
+            local lode = step.action.lodestone
+            if not Teleports.isLodestoneUnlocked(lode) then
+                API.logError(lode.name .. " lodestone is not unlocked")
+                return false
+            end
+        end
+    end
+    return true
+end
+
+function Routes.validateLodestonesForDestination(destination)
+    if not destination then return true end
+
+    if destination.route then
+        return Routes.validateLodestonesUnlocked(destination.route)
+    end
+
+    if destination.routeOptions then
+        local selectedRoute = Routes.selectRoute(destination)
+        if selectedRoute then
+            return Routes.validateLodestonesUnlocked(selectedRoute)
+        end
+    end
+
+    return true
+end
+
 function Routes.checkLodestonesForDestination(destination)
     if not destination then return end
 
@@ -192,8 +257,9 @@ function Routes.checkLodestonesForDestination(destination)
     end
 
     if destination.routeOptions then
-        for _, option in ipairs(destination.routeOptions) do
-            Routes.checkLodestones(option.route)
+        local selectedRoute = Routes.selectRoute(destination)
+        if selectedRoute then
+            Routes.checkLodestones(selectedRoute)
         end
     end
 end
@@ -207,6 +273,44 @@ local function isAtDestination(destination, selectedOre)
     local playerCoord = API.PlayerCoord()
     local distance = Utils.getDistance(playerCoord.x, playerCoord.y, oreCoord.x, oreCoord.y)
     return distance <= 20
+end
+
+function Routes.selectRoute(destination)
+    if destination.route then
+        return destination.route
+    end
+
+    if not destination.routeOptions then
+        return nil
+    end
+
+    local coord = API.PlayerCoord()
+    for _, option in ipairs(destination.routeOptions) do
+        if not option.condition then
+            return option.route
+        end
+        if option.condition.dungeoneeringCape then
+            if Teleports.hasDungeoneeringCape() then
+                return option.route
+            end
+        elseif option.condition.slayerCape then
+            if Teleports.hasSlayerCape() and Utils.getCombatLevel() >= 120 then
+                return option.route
+            end
+        elseif option.condition.archJournal then
+            if Teleports.hasArchJournal() then
+                return option.route
+            end
+        elseif option.condition.nearCoord then
+            local dist = Utils.getDistance(coord.x, coord.y, option.condition.nearCoord.x, option.condition.nearCoord.y)
+            if dist <= (option.condition.nearCoord.maxDistance or 40) then
+                return option.route
+            end
+        elseif option.condition.region and Utils.isAtRegion(option.condition.region) then
+            return option.route
+        end
+    end
+    return nil
 end
 
 function Routes.travelTo(destination, selectedOre)
@@ -225,26 +329,7 @@ function Routes.travelTo(destination, selectedOre)
         return true
     end
 
-    local route = destination.route
-    if destination.routeOptions then
-        local coord = API.PlayerCoord()
-        for _, option in ipairs(destination.routeOptions) do
-            if not option.condition then
-                route = option.route
-                break
-            end
-            if option.condition.nearCoord then
-                local dist = Utils.getDistance(coord.x, coord.y, option.condition.nearCoord.x, option.condition.nearCoord.y)
-                if dist <= (option.condition.nearCoord.maxDistance or 40) then
-                    route = option.route
-                    break
-                end
-            elseif option.condition.region and Utils.isAtRegion(option.condition.region) then
-                route = option.route
-                break
-            end
-        end
-    end
+    local route = Routes.selectRoute(destination)
 
     if not route then
         API.logError("No route defined for " .. destination.name)
@@ -280,6 +365,33 @@ Routes.TO_AL_KHARID_MINE = {
     }
 }
 
+Routes.TO_AL_KHARID_MINE_VIA_ARCH_JOURNAL = {
+    {
+        action = { teleport = "archJournal" },
+        skip_if = { nearCoord = {x = 3336, y = 3378} },
+        desc = "Teleport to Archaeology Campus"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3315, y = 3349}, {x = 3291, y = 3333}, {x = 3291, y = 3309}} } },
+        desc = "Walk to Rocks shortcut"
+    },
+    {
+        action = { interact = { object = "Rocks", action = "Climb over" } },
+        wait = { anim = 3303 },
+        timeout = 15,
+        desc = "Climb over rocks - animation start"
+    },
+    {
+        wait = { anim = 0 },
+        timeout = 15,
+        desc = "Climb over rocks - animation end"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3300, y = 3294}} } },
+        desc = "Walk to Al Kharid mine"
+    }
+}
+
 Routes.TO_AL_KHARID_RESOURCE_DUNGEON = {
     {
         action = { lodestone = Teleports.LODESTONES.AL_KHARID },
@@ -289,6 +401,61 @@ Routes.TO_AL_KHARID_RESOURCE_DUNGEON = {
     {
         action = { walk = { waypoints = {{x = 3307, y = 3217}, {x = 3306, y = 3244}, {x = 3301, y = 3272}, {x = 3298, y = 3294}, {x = 3299, y = 3307}} } },
         desc = "Walk to resource dungeon entrance"
+    },
+    {
+        action = { interact = { object = "Mysterious entrance", action = "Enter" } },
+        wait = { region = {x = 18, y = 70, z = 4678}, anim = 0 },
+        timeout = 20,
+        desc = "Enter resource dungeon"
+    }
+}
+
+Routes.TO_AL_KHARID_MINE_VIA_DUNGEONEERING_CAPE = {
+    {
+        action = { teleport = "dungeoneeringCape", teleportArg = "al_kharid" },
+        skip_if = { nearCoord = {x = 3301, y = 3309} },
+        desc = "Teleport via Dungeoneering cape"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3300, y = 3294}} } },
+        desc = "Walk to Al Kharid mine"
+    }
+}
+
+Routes.TO_AL_KHARID_RESOURCE_DUNGEON_VIA_DUNGEONEERING_CAPE = {
+    {
+        action = { teleport = "dungeoneeringCape", teleportArg = "al_kharid" },
+        skip_if = { nearCoord = {x = 3301, y = 3309} },
+        desc = "Teleport via Dungeoneering cape"
+    },
+    {
+        action = { interact = { object = "Mysterious entrance", action = "Enter" } },
+        wait = { region = {x = 18, y = 70, z = 4678}, anim = 0 },
+        timeout = 20,
+        desc = "Enter resource dungeon"
+    }
+}
+
+Routes.TO_AL_KHARID_RESOURCE_DUNGEON_VIA_ARCH_JOURNAL = {
+    {
+        action = { teleport = "archJournal" },
+        skip_if = { nearCoord = {x = 3336, y = 3378} },
+        desc = "Teleport to Archaeology Campus"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3315, y = 3349}, {x = 3291, y = 3333}, {x = 3291, y = 3309}} } },
+        desc = "Walk to Rocks shortcut"
+    },
+    {
+        action = { interact = { object = "Rocks", action = "Climb over" } },
+        wait = { anim = 3303 },
+        timeout = 15,
+        desc = "Climb over rocks - animation start"
+    },
+    {
+        wait = { anim = 0 },
+        timeout = 15,
+        desc = "Climb over rocks - animation end"
     },
     {
         action = { interact = { object = "Mysterious entrance", action = "Enter" } },
@@ -334,6 +501,38 @@ Routes.TO_ANACHRONIA_SW = {
     {
         action = { walk = { waypoints = {{x = 5314, y = 2285}, {x = 5329, y = 2269}, {x = 5340, y = 2255}} } },
         desc = "Walk to light animica rocks"
+    }
+}
+
+Routes.TO_ANACHRONIA_SWAMP = {
+    {
+        action = { teleport = "slayerCape", teleportArg = "laniakea" },
+        skip_if = { nearCoord = {x = 5670, y = 2140} },
+        desc = "Teleport to Laniakea via Slayer cape"
+    },
+    {
+        action = { walk = { waypoints = {{x = 5657, y = 2176}, {x = 5616, y = 2172}} } },
+        desc = "Walk to dark animica rocks"
+    }
+}
+
+Routes.TO_LLETYA_MINE = {
+    {
+        action = { lodestone = Teleports.LODESTONES.TIRANNWN },
+        skip_if = { nearCoord = {x = 2254, y = 3149} },
+        desc = "Teleport to Tirannwn lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2272, y = 3161}} } },
+        desc = "Walk to stick trap"
+    },
+    {
+        action = { interact = { object = "Sticks", action = "Pass" } },
+        wait = { coord = {x = 2277, y = 3163} },
+        timeout = 10,
+        retryAction = true,
+        retryOnAnim = 18353,
+        desc = "Pass sticks"
     }
 }
 
@@ -469,6 +668,18 @@ Routes.TO_VARROCK_SE_MINE = {
     }
 }
 
+Routes.TO_VARROCK_SE_MINE_VIA_ARCH_JOURNAL = {
+    {
+        action = { teleport = "archJournal" },
+        skip_if = { nearCoord = {x = 3336, y = 3378} },
+        desc = "Teleport to Archaeology Campus"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3306, y = 3367}, {x = 3287, y = 3363}} } },
+        desc = "Walk to Varrock SE mine"
+    }
+}
+
 Routes.TO_LUMBRIDGE_SE_MINE = {
     {
         action = { lodestone = Teleports.LODESTONES.LUMBRIDGE },
@@ -527,6 +738,40 @@ Routes.TO_DWARVEN_MINE = {
         wait = { region = {x = 47, y = 152, z = 12184} },
         timeout = 20,
         desc = "Climb down stairs"
+    }
+}
+
+Routes.TO_DWARVEN_MINE_VIA_DUNGEONEERING_CAPE = {
+    {
+        action = { teleport = "dungeoneeringCape", teleportArg = "dwarven_mine" },
+        skip_if = { nearCoord = {x = 3037, y = 9774} },
+        desc = "Teleport via Dungeoneering cape"
+    }
+}
+
+Routes.TO_DWARVEN_RESOURCE_DUNGEON_VIA_DUNGEONEERING_CAPE = {
+    {
+        action = { teleport = "dungeoneeringCape", teleportArg = "dwarven_mine" },
+        skip_if = { nearCoord = {x = 3037, y = 9774} },
+        desc = "Teleport via Dungeoneering cape"
+    },
+    {
+        action = { interact = { object = "Mysterious entrance", action = "Enter" } },
+        wait = { coord = {x = 1041, y = 4575}, anim = 0 },
+        timeout = 20,
+        desc = "Enter resource dungeon"
+    }
+}
+
+Routes.TO_KARAMJA_VOLCANO_MINE = {
+    {
+        action = { teleport = "dungeoneeringCape", teleportArg = "karamja" },
+        skip_if = { nearCoord = {x = 2844, y = 9558} },
+        desc = "Teleport via Dungeoneering cape"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2860, y = 9577}} } },
+        desc = "Walk to runite rocks"
     }
 }
 
@@ -706,6 +951,14 @@ Routes.TO_WILDERNESS_PIRATES_HIDEOUT = {
     {
         action = { walk = { waypoints = {{x = 3131, y = 3957}, {x = 3101, y = 3962}, {x = 3075, y = 3950}, {x = 3058, y = 3946}} } },
         desc = "Walk to Pirates Hideout mine"
+    }
+}
+
+Routes.TO_WILDERNESS_PIRATES_HIDEOUT_VIA_SLAYER_CAPE = {
+    {
+        action = { teleport = "slayerCape", teleportArg = "mandrith" },
+        skip_if = { nearCoord = {x = 3050, y = 3949} },
+        desc = "Teleport to Mandrith via Slayer cape"
     }
 }
 
@@ -956,6 +1209,36 @@ Routes.TO_MINING_GUILD_RESOURCE_DUNGEON_FROM_ARTISANS_GUILD_BANK = {
     }
 }
 
+Routes.TO_MINING_GUILD_VIA_DUNGEONEERING_CAPE = {
+    {
+        action = { teleport = "dungeoneeringCape", teleportArg = "mining_guild" },
+        skip_if = { nearCoord = {x = 3021, y = 9738} },
+        desc = "Teleport via Dungeoneering cape"
+    }
+}
+
+Routes.TO_MINING_GUILD_RESOURCE_DUNGEON_VIA_DUNGEONEERING_CAPE = {
+    {
+        action = { teleport = "dungeoneeringCape", teleportArg = "mining_guild" },
+        skip_if = { nearCoord = {x = 3021, y = 9738} },
+        desc = "Teleport via Dungeoneering cape"
+    },
+    {
+        action = { interact = { object = "Mysterious entrance", action = "Enter" } },
+        wait = { region = {x = 16, y = 70, z = 4166} },
+        timeout = 20,
+        desc = "Enter resource dungeon"
+    }
+}
+
+Routes.TO_DAEMONHEIM_SOUTHWEST_MINE_VIA_DUNGEONEERING_CAPE = {
+    {
+        action = { teleport = "dungeoneeringCape", teleportArg = "kalgerion" },
+        skip_if = { nearCoord = {x = 3399, y = 3663} },
+        desc = "Teleport via Dungeoneering cape"
+    }
+}
+
 Routes.TO_DAEMONHEIM_BANK = {
     {
         action = { teleport = "ringOfKinship" },
@@ -1079,6 +1362,88 @@ Routes.TO_DAEMONHEIM_RESOURCE_DUNGEON = {
         wait = { nearCoord = {x = 3498, y = 3633} },
         timeout = 20,
         desc = "Enter resource dungeon"
+    }
+}
+
+Routes.TO_DAEMONHEIM_RESOURCE_DUNGEON_VIA_DUNGEONEERING_CAPE = {
+    {
+        action = { teleport = "dungeoneeringCape", teleportArg = "daemonheim" },
+        skip_if = { nearCoord = {x = 3513, y = 3663} },
+        desc = "Teleport via Dungeoneering cape"
+    },
+    {
+        action = { interact = { object = "Mysterious entrance", action = "Enter" } },
+        wait = { nearCoord = {x = 3498, y = 3633} },
+        timeout = 20,
+        desc = "Enter resource dungeon"
+    }
+}
+
+Routes.TO_PRIFDDINAS_BANK = {
+    {
+        action = { lodestone = Teleports.LODESTONES.PRIFDDINAS },
+        skip_if = { nearCoord = {x = 2208, y = 3360} },
+        desc = "Teleport to Prifddinas lodestone"
+    }
+}
+
+Routes.TO_DEEP_SEA_FISHING_HUB_BANK = {
+    {
+        action = { teleport = "deepSeaFishingHub" },
+        skip_if = { nearCoord = {x = 2135, y = 7107} },
+        desc = "Teleport to Deep Sea Fishing Hub"
+    }
+}
+
+Routes.TO_BURTHORPE_BANK = {
+    {
+        action = { lodestone = Teleports.LODESTONES.BURTHORPE },
+        skip_if = { nearCoord = {x = 2899, y = 3544} },
+        desc = "Teleport to Burthorpe lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2888, y = 3536}} } },
+        desc = "Walk to Burthorpe bank chest"
+    }
+}
+
+Routes.TO_LUMBRIDGE_FURNACE = {
+    {
+        action = { lodestone = Teleports.LODESTONES.LUMBRIDGE },
+        skip_if = { nearCoord = {x = 3233, y = 3221} },
+        desc = "Teleport to Lumbridge lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3227, y = 3254}} } },
+        desc = "Walk to Lumbridge furnace"
+    }
+}
+
+Routes.TO_LUMBRIDGE_MARKET_BANK = {
+    {
+        action = { lodestone = Teleports.LODESTONES.LUMBRIDGE },
+        skip_if = { nearCoord = {x = 3233, y = 3221} },
+        desc = "Teleport to Lumbridge lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3213, y = 3257}} } },
+        desc = "Walk to Lumbridge Market bank chest"
+    }
+}
+
+Routes.TO_MAX_GUILD_BANK = {
+    {
+        action = { teleport = "maxGuild" },
+        skip_if = { nearCoord = {x = 2276, y = 3313} },
+        desc = "Teleport to Max Guild"
+    }
+}
+
+Routes.TO_WARS_RETREAT_BANK = {
+    {
+        action = { teleport = "warsRetreat" },
+        skip_if = { nearCoord = {x = 3294, y = 10127} },
+        desc = "Teleport to War's Retreat"
     }
 }
 

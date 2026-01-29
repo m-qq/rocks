@@ -9,7 +9,7 @@ Teleports.LODESTONES = {
     ANACHRONIA = {loc = WPOINT.new(5431, 2338, 0), name = "Anachronia", interfaceId = 25, varbit = 44270},
     ARDOUGNE = {loc = WPOINT.new(2634, 3348, 0), name = "Ardougne", interfaceId = 12, varbit = 29},
     ASHDALE = {loc = WPOINT.new(2474, 2708, 2), name = "Ashdale", interfaceId = 34, varbit = 22430},
-    BANDIT_CAMP = {loc = WPOINT.new(2899, 3544, 0), name = "Bandit Camp", interfaceId = 9},
+    BANDIT_CAMP = {loc = WPOINT.new(3214, 2954, 0), name = "Bandit Camp", interfaceId = 9},
     BURTHORPE = {loc = WPOINT.new(2899, 3544, 0), name = "Burthorpe", interfaceId = 13, varbit = 30},
     CANIFIS = {loc = WPOINT.new(3517, 3515, 0), name = "Canifis", interfaceId = 27, varbit = 18523},
     CATHERBY = {loc = WPOINT.new(2811, 3449, 0), name = "Catherby", interfaceId = 14, varbit = 31},
@@ -68,6 +68,10 @@ local function teleportViaNetwork(lode)
     API.logInfo("Selecting " .. lode.name .. " lodestone...")
     API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1092, lode.interfaceId, -1, API.OFF_ACT_GeneralInterface_route)
     return true
+end
+
+function Teleports.isLodestoneUnlocked(lode)
+    return isLodestoneUnlocked(lode)
 end
 
 function Teleports.isLodestoneAvailable(lode)
@@ -134,31 +138,287 @@ function Teleports.lodestone(lode)
     return true
 end
 
-local function hasArchJournalInInventory()
-    return Inventory:Contains(DATA.ARCH_JOURNAL_ID)
-end
-
-local function hasArchJournalEquipped()
+local function hasItemInEquipment(itemId, slot)
     local container = API.Container_Get_all(94)
-    return container and container[18] and container[18].item_id == DATA.ARCH_JOURNAL_ID
+    return container and container[slot] and container[slot].item_id == itemId
 end
 
-local function hasRingOfKinshipInInventory()
-    return Inventory:Contains(DATA.RING_OF_KINSHIP_ID)
+function Teleports.getEquippedCape(capeIds)
+    for _, id in ipairs(capeIds) do
+        if hasItemInEquipment(id, 2) then return id end
+    end
+    return nil
 end
 
-local function hasRingOfKinshipEquipped()
-    local container = API.Container_Get_all(94)
-    return container and container[13] and container[13].item_id == DATA.RING_OF_KINSHIP_ID
+function Teleports.hasSlayerCape()
+    if Teleports.getEquippedCape(DATA.SLAYER_CAPE_IDS) then return true end
+    for _, id in ipairs(DATA.SLAYER_CAPE_IDS) do
+        if Inventory:Contains(id) then return true end
+    end
+    return false
+end
+
+function Teleports.hasDungeoneeringCape()
+    if Teleports.getEquippedCape(DATA.DUNGEONEERING_CAPE_IDS) then return true end
+    for _, id in ipairs(DATA.DUNGEONEERING_CAPE_IDS) do
+        if Inventory:Contains(id) then return true end
+    end
+    return false
+end
+
+Teleports.SLAYER_DESTINATIONS = {
+    mandrith = {
+        name = "1. Mandrith",
+        selectKey = 49,
+        interface = DATA.INTERFACES.SLAYER_CAPE_MANDRITH,
+        coord = {x = 3050, y = 3949}
+    },
+    laniakea = {
+        name = "2. Laniakea",
+        selectKey = 50,
+        interface = DATA.INTERFACES.SLAYER_CAPE_LANIAKEA,
+        coord = {x = 5670, y = 2140}
+    }
+}
+
+local SLAYER_CAPE_ACTIONS = {
+    [9786] = {action = 3, route = API.OFF_ACT_GeneralInterface_route},
+    [9787] = {action = 3, route = API.OFF_ACT_GeneralInterface_route},
+    [31282] = {action = 3, route = API.OFF_ACT_GeneralInterface_route},
+    [53782] = {action = 3, route = API.OFF_ACT_GeneralInterface_route},
+    [34274] = {action = 7, route = API.OFF_ACT_GeneralInterface_route2},
+    [34275] = {action = 7, route = API.OFF_ACT_GeneralInterface_route2},
+    [53810] = {action = 7, route = API.OFF_ACT_GeneralInterface_route2},
+    [53839] = {action = 7, route = API.OFF_ACT_GeneralInterface_route2}
+}
+
+function Teleports.slayerCape(destinationKey)
+    local dest = Teleports.SLAYER_DESTINATIONS[destinationKey]
+    if not dest then
+        API.logError("Unknown Slayer cape destination: " .. tostring(destinationKey))
+        return false
+    end
+
+    local capeId = Teleports.getEquippedCape(DATA.SLAYER_CAPE_IDS)
+    local inventorySlot = nil
+    if not capeId then
+        for _, id in ipairs(DATA.SLAYER_CAPE_IDS) do
+            if Inventory:Contains(id) then
+                local item = Inventory:GetItem(id)
+                capeId = id
+                inventorySlot = item[1].slot
+                break
+            end
+        end
+    end
+
+    if not capeId then
+        API.logWarn("No Slayer cape found")
+        return false
+    end
+
+    if API.ReadPlayerAnim() ~= 0 then
+        API.logInfo("Waiting for current action to finish...")
+        if not Utils.waitOrTerminate(function()
+            return API.ReadPlayerAnim() == 0
+        end, 10, 100, "Timed out waiting for action to finish") then
+            return false
+        end
+    end
+
+    API.logInfo("Using Slayer cape to teleport to " .. dest.name .. "...")
+    if inventorySlot then
+        local params = SLAYER_CAPE_ACTIONS[capeId]
+        API.DoAction_Interface(0x24, capeId, params.action, 1473, 5, inventorySlot, params.route)
+    else
+        API.DoAction_Interface(0xffffffff, capeId, 3, 1464, 15, 1, API.OFF_ACT_GeneralInterface_route)
+    end
+
+    if not Utils.waitOrTerminate(function()
+        local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SLAYER_MASTER_TELEPORT)
+        return #result > 0 and result[1].textids == "Choose a slayer master"
+    end, 10, 100, "Slayer teleport interface did not open") then
+        return false
+    end
+
+    if dest.pageKey then
+        API.logInfo("Navigating to next page...")
+        API.KeyboardPress33(dest.pageKey, 0, 100, 50)
+    end
+
+    if not Utils.waitOrTerminate(function()
+        local result = API.ScanForInterfaceTest2Get(false, dest.interface)
+        return #result > 0 and result[1].textids == dest.name
+    end, 10, 100, dest.name .. " option not found") then
+        local result = API.ScanForInterfaceTest2Get(false, dest.interface)
+        if #result > 0 then
+            API.logError("Found instead: " .. tostring(result[1].textids))
+        else
+            API.logError("No interface results found")
+        end
+        return false
+    end
+
+    API.logInfo("Selecting " .. dest.name .. "...")
+    API.KeyboardPress33(dest.selectKey, 0, 100, 50)
+
+    if not Utils.waitOrTerminate(function()
+        local coord = API.PlayerCoord()
+        local dist = Utils.getDistance(coord.x, coord.y, dest.coord.x, dest.coord.y)
+        return API.ReadPlayerAnim() == 8941 and dist <= 15
+    end, 15, 100, "Failed to teleport to " .. dest.name) then
+        return false
+    end
+    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Teleport animation did not finish")
+    API.logInfo("Slayer cape teleport complete")
+    return true
+end
+
+Teleports.DUNGEONEERING_DESTINATIONS = {
+    al_kharid = {
+        name = "5. Al Kharid hidden mine",
+        pageKey = 48,
+        selectKey = 53,
+        interface = DATA.INTERFACES.DUNGEONEERING_CAPE_AL_KHARID,
+        coord = {x = 3301, y = 3308}
+    },
+    daemonheim = {
+        name = "5. Daemonheim woodcutting island dungeon",
+        selectKey = 53,
+        interface = DATA.INTERFACES.DUNGEONEERING_CAPE_DAEMONHEIM,
+        coord = {x = 3513, y = 3663}
+    },
+    dwarven_mine = {
+        name = "2. Dwarven mine hidden mine",
+        selectKey = 50,
+        interface = DATA.INTERFACES.DUNGEONEERING_CAPE_DWARVEN,
+        coord = {x = 3037, y = 9774}
+    },
+    karamja = {
+        name = "4. Karamja Volcano lesser demon dungeon",
+        selectKey = 52,
+        interface = DATA.INTERFACES.DUNGEONEERING_CAPE_KARAMJA,
+        coord = {x = 2844, y = 9558}
+    },
+    mining_guild = {
+        name = "7. Mining Guild hidden mine",
+        selectKey = 55,
+        interface = DATA.INTERFACES.DUNGEONEERING_CAPE_MINING_GUILD,
+        coord = {x = 3021, y = 9738}
+    },
+    kalgerion = {
+        name = "9. Kal'gerion demon dungeon",
+        pageKey = 48,
+        selectKey = 57,
+        interface = DATA.INTERFACES.DUNGEONEERING_CAPE_KALGERION,
+        coord = {x = 3399, y = 3663}
+    }
+}
+
+local DUNGEONEERING_CAPE_ACTIONS = {
+    [18508] = {action = 3, route = API.OFF_ACT_GeneralInterface_route},
+    [18509] = {action = 3, route = API.OFF_ACT_GeneralInterface_route},
+    [19709] = {action = 3, route = API.OFF_ACT_GeneralInterface_route},
+    [53792] = {action = 3, route = API.OFF_ACT_GeneralInterface_route},
+    [34294] = {action = 7, route = API.OFF_ACT_GeneralInterface_route2},
+    [34295] = {action = 7, route = API.OFF_ACT_GeneralInterface_route2},
+    [53820] = {action = 7, route = API.OFF_ACT_GeneralInterface_route2},
+    [53849] = {action = 7, route = API.OFF_ACT_GeneralInterface_route2}
+}
+
+function Teleports.dungeoneeringCape(destinationKey)
+    local dest = Teleports.DUNGEONEERING_DESTINATIONS[destinationKey]
+    if not dest then
+        API.logError("Unknown Dungeoneering cape destination: " .. tostring(destinationKey))
+        return false
+    end
+
+    local capeId = Teleports.getEquippedCape(DATA.DUNGEONEERING_CAPE_IDS)
+    local inventorySlot = nil
+    if not capeId then
+        for _, id in ipairs(DATA.DUNGEONEERING_CAPE_IDS) do
+            if Inventory:Contains(id) then
+                local item = Inventory:GetItem(id)
+                capeId = id
+                inventorySlot = item[1].slot
+                break
+            end
+        end
+    end
+
+    if not capeId then
+        API.logWarn("No Dungeoneering cape found")
+        return false
+    end
+
+    if API.ReadPlayerAnim() ~= 0 then
+        API.logInfo("Waiting for current action to finish...")
+        if not Utils.waitOrTerminate(function()
+            return API.ReadPlayerAnim() == 0
+        end, 10, 100, "Timed out waiting for action to finish") then
+            return false
+        end
+    end
+
+    API.logInfo("Using Dungeoneering cape to teleport to " .. dest.name .. "...")
+    if inventorySlot then
+        local params = DUNGEONEERING_CAPE_ACTIONS[capeId]
+        API.DoAction_Interface(0x24, capeId, params.action, 1473, 5, inventorySlot, params.route)
+    else
+        API.DoAction_Interface(0xffffffff, capeId, 3, 1464, 15, 1, API.OFF_ACT_GeneralInterface_route)
+    end
+
+    if not Utils.waitOrTerminate(function()
+        local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.DUNGEONEERING_CAPE_TELEPORT)
+        return #result > 0 and result[1].textids == "Where would you like to teleport to?"
+    end, 10, 100, "Dungeoneering cape teleport interface did not open") then
+        return false
+    end
+
+    if dest.pageKey then
+        API.logInfo("Navigating to next page...")
+        API.KeyboardPress33(dest.pageKey, 0, 100, 50)
+    end
+
+    if not Utils.waitOrTerminate(function()
+        local result = API.ScanForInterfaceTest2Get(false, dest.interface)
+        return #result > 0 and result[1].textids == dest.name
+    end, 10, 100, dest.name .. " option not found") then
+        local result = API.ScanForInterfaceTest2Get(false, dest.interface)
+        if #result > 0 then
+            API.logError("Found instead: " .. tostring(result[1].textids))
+        else
+            API.logError("No interface results found")
+        end
+        return false
+    end
+
+    API.logInfo("Selecting " .. dest.name .. "...")
+    API.KeyboardPress33(dest.selectKey, 0, 100, 50)
+
+    if not Utils.waitOrTerminate(function()
+        local coord = API.PlayerCoord()
+        local dist = Utils.getDistance(coord.x, coord.y, dest.coord.x, dest.coord.y)
+        return API.ReadPlayerAnim() == 8941 and dist <= 15
+    end, 15, 100, "Failed to teleport to " .. dest.name) then
+        return false
+    end
+    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Teleport animation did not finish")
+    API.logInfo("Dungeoneering cape teleport complete")
+    return true
+end
+
+function Teleports.hasArchJournal()
+    return Inventory:Contains(DATA.ARCH_JOURNAL_ID) or hasItemInEquipment(DATA.ARCH_JOURNAL_ID, 18)
 end
 
 function Teleports.hasRingOfKinship()
-    return hasRingOfKinshipInInventory() or hasRingOfKinshipEquipped()
+    return Inventory:Contains(DATA.RING_OF_KINSHIP_ID) or hasItemInEquipment(DATA.RING_OF_KINSHIP_ID, 13)
 end
 
 function Teleports.ringOfKinship()
-    local inInventory = hasRingOfKinshipInInventory()
-    local equipped = hasRingOfKinshipEquipped()
+    local inInventory = Inventory:Contains(DATA.RING_OF_KINSHIP_ID)
+    local equipped = hasItemInEquipment(DATA.RING_OF_KINSHIP_ID, 13)
 
     if not inInventory and not equipped then
         API.logWarn("No Ring of Kinship found in inventory or equipped")
@@ -199,8 +459,8 @@ function Teleports.ringOfKinship()
 end
 
 function Teleports.archJournal()
-    local inInventory = hasArchJournalInInventory()
-    local equipped = hasArchJournalEquipped()
+    local inInventory = Inventory:Contains(DATA.ARCH_JOURNAL_ID)
+    local equipped = hasItemInEquipment(DATA.ARCH_JOURNAL_ID, 18)
 
     if not inInventory and not equipped then
         API.logWarn("No archaeology journal found in inventory or equipped")
@@ -269,6 +529,128 @@ function Teleports.memoryStrand()
         local dist = Utils.getDistance(coord.x, coord.y, 2292, 3553)
         return dist <= 10 and API.ReadPlayerAnim() == 0
     end, 15, 100, "Failed to teleport to Memorial to Guthix")
+end
+
+local GOTE_ID = 44550
+
+function Teleports.hasGraceOfTheElves()
+    return hasItemInEquipment(GOTE_ID, 3)
+end
+
+function Teleports.deepSeaFishingHub()
+    if not hasItemInEquipment(GOTE_ID, 3) then
+        API.logError("Grace of the Elves necklace not equipped")
+        API.Write_LoopyLoop(false)
+        return false
+    end
+
+    local portal2 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_2)
+    local portal1 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_1)
+
+    local action
+    if portal2 == 16 then
+        action = 3
+    elseif portal1 == 16 then
+        action = 2
+    else
+        API.logError("Deep Sea Fishing Hub is not set as a Grace of the Elves portal destination. Please configure it via the necklace.")
+        API.Write_LoopyLoop(false)
+        return false
+    end
+
+    if API.ReadPlayerAnim() ~= 0 then
+        API.logInfo("Waiting for current action to finish...")
+        if not Utils.waitOrTerminate(function()
+            return API.ReadPlayerAnim() == 0
+        end, 10, 100, "Timed out waiting for action to finish") then
+            return false
+        end
+    end
+
+    API.logInfo("Teleporting to Deep Sea Fishing Hub...")
+    API.DoAction_Interface(0xffffffff, GOTE_ID, action, 1464, 15, 2, API.OFF_ACT_GeneralInterface_route)
+
+    if not Utils.waitOrTerminate(function()
+        return API.ReadPlayerAnim() == 8941
+    end, 15, 100, "Failed to start Deep Sea Fishing Hub teleport") then
+        return false
+    end
+
+    if not Utils.waitOrTerminate(function()
+        local coord = API.PlayerCoord()
+        return API.ReadPlayerAnim() == 0 and coord.x == 2135 and coord.y == 7107
+    end, 15, 100, "Failed to arrive at Deep Sea Fishing Hub") then
+        return false
+    end
+
+    API.logInfo("Deep Sea Fishing Hub teleport complete")
+    return true
+end
+
+function Teleports.maxGuild()
+    if API.ReadPlayerAnim() ~= 0 then
+        API.logInfo("Waiting for current action to finish...")
+        if not Utils.waitOrTerminate(function()
+            return API.ReadPlayerAnim() == 0
+        end, 10, 100, "Timed out waiting for action to finish") then
+            return false
+        end
+    end
+
+    API.logInfo("Teleporting to Max Guild...")
+    API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1461, 1, 199, API.OFF_ACT_GeneralInterface_route)
+
+    if not Utils.waitOrTerminate(function()
+        return API.ReadPlayerAnim() == 8941
+    end, 15, 100, "Failed to start Max Guild teleport") then
+        return false
+    end
+
+    if not Utils.waitOrTerminate(function()
+        return API.ReadPlayerAnim() == 0
+    end, 15, 100, "Max Guild teleport animation did not finish") then
+        return false
+    end
+
+    local coord = API.PlayerCoord()
+    if coord.x ~= 2276 or coord.y ~= 3313 then
+        API.logError("Max Guild teleport landed at wrong location (" .. coord.x .. ", " .. coord.y .. "). Talk to Elen Anterth in the Max Guild to change your teleport location to be inside the tower.")
+        API.Write_LoopyLoop(false)
+        return false
+    end
+
+    API.logInfo("Max Guild teleport complete")
+    return true
+end
+
+function Teleports.warsRetreat()
+    if API.ReadPlayerAnim() ~= 0 then
+        API.logInfo("Waiting for current action to finish...")
+        if not Utils.waitOrTerminate(function()
+            return API.ReadPlayerAnim() == 0
+        end, 10, 100, "Timed out waiting for action to finish") then
+            return false
+        end
+    end
+
+    API.logInfo("Teleporting to War's Retreat...")
+    API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1461, 1, 205, API.OFF_ACT_GeneralInterface_route)
+
+    if not Utils.waitOrTerminate(function()
+        return API.ReadPlayerAnim() == 8941
+    end, 15, 100, "Failed to start War's Retreat teleport") then
+        return false
+    end
+
+    if not Utils.waitOrTerminate(function()
+        local coord = API.PlayerCoord()
+        return API.ReadPlayerAnim() == 0 and coord.x == 3294 and coord.y == 10127
+    end, 15, 100, "Failed to arrive at War's Retreat") then
+        return false
+    end
+
+    API.logInfo("War's Retreat teleport complete")
+    return true
 end
 
 return Teleports

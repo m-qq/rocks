@@ -5,6 +5,9 @@ DATA.ARCH_JOURNAL_ID = 49429
 DATA.RING_OF_KINSHIP_ID = 15707
 DATA.MEMORY_STRAND_ID = 39486
 
+DATA.SLAYER_CAPE_IDS = {9786, 9787, 34274, 34275, 53810, 53839, 31282, 53782}
+DATA.DUNGEONEERING_CAPE_IDS = {18508, 18509, 34294, 34295, 53820, 53849, 19709, 53792}
+
 DATA.DUNGEONEERING_ORES = {
     "novite", "bathus", "marmaros", "kratonium", "fractite",
     "zephyrium", "argonite", "katagon", "gorgonite", "promethium"
@@ -15,6 +18,9 @@ DATA.VARBIT_IDS = {
     AUTO_RETALIATE = 42166,
     COMBAT_LEVEL = 9611,
     POF_BANK_UNLOCKED = 41690,
+    WARS_RETREAT_UNLOCKED = 45680,
+    GOTE_PORTAL_1 = 25054,
+    GOTE_PORTAL_2 = 25055,
 
     ORESOME = {
         COPPER = 43189,
@@ -75,7 +81,17 @@ DATA.STILL_ORESOME_BONUS = 10
 
 DATA.INTERFACES = {
     LODESTONE_NETWORK = { { 1092,1,-1,0 }, { 1092,56,-1,0 }, { 1092,56,14,0 } },
-    DIG_SITES = { { 667,0,-1,0 }, { 667,26,-1,0 }, { 667,26,14,0 } }
+    DIG_SITES = { { 667,0,-1,0 }, { 667,26,-1,0 }, { 667,26,14,0 } },
+    SLAYER_MASTER_TELEPORT = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,3,-1,0 } },
+    SLAYER_CAPE_MANDRITH = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,4,-1,0 }, { 720,14,-1,0 } },
+    SLAYER_CAPE_LANIAKEA = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,5,-1,0 }, { 720,21,-1,0 } },
+    DUNGEONEERING_CAPE_TELEPORT = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,3,-1,0 } },
+    DUNGEONEERING_CAPE_AL_KHARID = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,8,-1,0 }, { 720,30,-1,0 } },
+    DUNGEONEERING_CAPE_DAEMONHEIM = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,8,-1,0 }, { 720,30,-1,0 } },
+    DUNGEONEERING_CAPE_DWARVEN = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,5,-1,0 }, { 720,21,-1,0 } },
+    DUNGEONEERING_CAPE_KARAMJA = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,7,-1,0 }, { 720,27,-1,0 } },
+    DUNGEONEERING_CAPE_MINING_GUILD = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,10,-1,0 }, { 720,36,-1,0 } },
+    DUNGEONEERING_CAPE_KALGERION = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,12,-1,0 }, { 720,42,-1,0 } }
 }
 
 DATA.MEMORY_STRAND_SLOTS = {

@@ -66,7 +66,10 @@ Banking.LOCATIONS = {
     wilderness_pirates_hideout_anvil = {
         name = "Wilderness Pirates Hideout Anvil",
         skip_if = { nearCoord = {x = 3064, y = 3951} },
-        route = Routes.TO_WILDERNESS_PIRATES_HIDEOUT,
+        routeOptions = {
+            { condition = { slayerCape = true }, route = Routes.TO_WILDERNESS_PIRATES_HIDEOUT_VIA_SLAYER_CAPE },
+            { route = Routes.TO_WILDERNESS_PIRATES_HIDEOUT }
+        },
         metalBank = {
             object = "Anvil",
             action = "Deposit-all (into metal bank)"
@@ -116,6 +119,33 @@ Banking.LOCATIONS = {
             action = "Use"
         }
     },
+    prifddinas = {
+        name = "Prifddinas",
+        skip_if = { nearCoord = {x = 2208, y = 3360} },
+        route = Routes.TO_PRIFDDINAS_BANK,
+        bank = {
+            npc = "Banker",
+            action = "Bank"
+        }
+    },
+    deep_sea_fishing_hub = {
+        name = "Deep Sea Fishing Hub",
+        skip_if = { nearCoord = {x = 2135, y = 7107} },
+        route = Routes.TO_DEEP_SEA_FISHING_HUB_BANK,
+        bank = {
+            object = "Rowboat",
+            action = "Bank"
+        }
+    },
+    burthorpe = {
+        name = "Burthorpe",
+        skip_if = { nearCoord = {x = 2888, y = 3536} },
+        route = Routes.TO_BURTHORPE_BANK,
+        bank = {
+            object = "Bank chest",
+            action = "Use"
+        }
+    },
     daemonheim_banker = {
         name = "Daemonheim Banker",
         skip_if = { nearCoord = {x = 3448, y = 3719} },
@@ -123,6 +153,42 @@ Banking.LOCATIONS = {
         bank = {
             npc = "Fremennik banker",
             action = "Bank"
+        }
+    },
+    lumbridge_furnace = {
+        name = "Lumbridge Furnace",
+        skip_if = { nearCoord = {x = 3227, y = 3254} },
+        route = Routes.TO_LUMBRIDGE_FURNACE,
+        metalBank = {
+            object = "Furnace",
+            action = "Deposit-all (into metal bank)"
+        }
+    },
+    lumbridge_market = {
+        name = "Lumbridge Market",
+        skip_if = { nearCoord = {x = 3213, y = 3257} },
+        route = Routes.TO_LUMBRIDGE_MARKET_BANK,
+        bank = {
+            object = "Bank chest",
+            action = "Use"
+        }
+    },
+    max_guild = {
+        name = "Max Guild",
+        skip_if = { nearCoord = {x = 2276, y = 3313} },
+        route = Routes.TO_MAX_GUILD_BANK,
+        bank = {
+            npc = "Banker",
+            action = "Bank"
+        }
+    },
+    wars_retreat = {
+        name = "War's Retreat",
+        skip_if = { nearCoord = {x = 3294, y = 10127} },
+        route = Routes.TO_WARS_RETREAT_BANK,
+        bank = {
+            object = "Bank chest",
+            action = "Use"
         }
     }
 }

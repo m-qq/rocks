@@ -3,13 +3,11 @@ local API = require("api")
 local idleHandler = {
     startTime = 0,
     randomTime = 0,
-    lastMemoryCheck = 0
 }
 
 function idleHandler.init()
     idleHandler.startTime = API.ScriptRuntime()
     idleHandler.randomTime = math.random(5*60, 9*60)
-    idleHandler.lastMemoryCheck = collectgarbage("count")
 end
 
 function idleHandler.check()
@@ -34,15 +32,7 @@ function idleHandler.getTimeUntilNextIdle()
 end
 
 function idleHandler.collectGarbage()
-    local currentMem = collectgarbage("count")
-    local memDiff = currentMem - idleHandler.lastMemoryCheck
-
-    if memDiff >= 1000 then
-        collectgarbage("collect")
-        local afterMem = collectgarbage("count")
-        API.logInfo(string.format("Garbage cleanup - Memory: %.2f KB (freed: %.2f KB)", afterMem, currentMem - afterMem))
-        idleHandler.lastMemoryCheck = afterMem
-    end
+    collectgarbage("step", 100)
 end
 
 return idleHandler
