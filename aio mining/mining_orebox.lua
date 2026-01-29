@@ -1,5 +1,6 @@
 local API = require("api")
 local DATA = require("aio mining/mining_data")
+local Utils = require("aio mining/mining_utils")
 
 local OreBox = {}
 
@@ -77,6 +78,14 @@ end
 function OreBox.fill(boxId)
     if not boxId then
         return false
+    end
+    if not Inventory:IsOpen() then
+        API.DoAction_Interface(0xc2, 0xffffffff, 1, 1431, 0, 9, API.OFF_ACT_GeneralInterface_route)
+        if not Utils.waitOrTerminate(function()
+            return Inventory:IsOpen()
+        end, 10, 100, "Failed to open inventory") then
+            return false
+        end
     end
     API.logInfo("Filling ore box...")
     if API.DoAction_Inventory1(boxId, 0, 1, API.OFF_ACT_GeneralInterface_route) then
