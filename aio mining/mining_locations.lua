@@ -46,6 +46,19 @@ local MINING_LOCATIONS = {
         }
     },
 
+    al_kharid_gem_rocks = {
+        name = "Al Kharid Gem Rocks",
+        routeOptions = {
+            { condition = { dungeoneeringCape = true }, route = Routes.TO_AL_KHARID_GEM_ROCKS_VIA_DUNGEONEERING_CAPE },
+            { condition = { archJournal = true }, route = Routes.TO_AL_KHARID_GEM_ROCKS_VIA_ARCH_JOURNAL },
+            { route = Routes.TO_AL_KHARID_GEM_ROCKS }
+        },
+        ores = {"uncommon_gem_rock"},
+        oreCoords = {
+            uncommon_gem_rock = {x = 3299, y = 3313}
+        }
+    },
+
     al_kharid_resource_dungeon = {
         name = "Al Kharid Resource Dungeon",
         routeOptions = {

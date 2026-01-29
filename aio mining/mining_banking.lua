@@ -97,8 +97,8 @@ Banking.LOCATIONS = {
         name = "Artisans Guild Furnace",
         skip_if = { nearCoord = {x = 3043, y = 3340} },
         routeOptions = {
-            { condition = { region = {x = 16, y = 70, z = 4166} }, route = Routes.TO_ARTISANS_GUILD_FURNACE_FROM_MGRD },
-            { condition = { region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_ARTISANS_GUILD_FURNACE_FROM_MG },
+            { condition = { fromLocation = {"mining_guild_resource_dungeon"}, region = {x = 16, y = 70, z = 4166} }, route = Routes.TO_ARTISANS_GUILD_FURNACE_FROM_MGRD },
+            { condition = { fromLocation = {"mining_guild"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_ARTISANS_GUILD_FURNACE_FROM_MG },
             { route = Routes.TO_ARTISANS_GUILD_FURNACE }
         },
         metalBank = {
@@ -110,8 +110,8 @@ Banking.LOCATIONS = {
         name = "Artisans Guild Bank",
         skip_if = { nearCoord = {x = 3061, y = 3340} },
         routeOptions = {
-            { condition = { region = {x = 16, y = 70, z = 4166} }, route = Routes.TO_ARTISANS_GUILD_BANK_FROM_MGRD },
-            { condition = { region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_ARTISANS_GUILD_BANK_FROM_MG },
+            { condition = { fromLocation = {"mining_guild_resource_dungeon"}, region = {x = 16, y = 70, z = 4166} }, route = Routes.TO_ARTISANS_GUILD_BANK_FROM_MGRD },
+            { condition = { fromLocation = {"mining_guild"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_ARTISANS_GUILD_BANK_FROM_MG },
             { route = Routes.TO_ARTISANS_GUILD_BANK }
         },
         bank = {
@@ -253,7 +253,7 @@ function Banking.openBank(bankLocation, bankPin)
     return false
 end
 
-function Banking.depositAllItems(oreBoxId, oreConfig)
+function Banking.depositAllItems(oreBoxId, oreConfig, gemBagId)
     local keepItems = {
         [DATA.ARCH_JOURNAL_ID] = true,
         [DATA.RING_OF_KINSHIP_ID] = true,
@@ -268,6 +268,9 @@ function Banking.depositAllItems(oreBoxId, oreConfig)
     if oreBoxId then
         keepItems[oreBoxId] = true
     end
+    if gemBagId then
+        keepItems[gemBagId] = true
+    end
 
     if oreBoxId and oreConfig then
         local currentCount = OreBox.getOreCount(oreConfig)
@@ -277,6 +280,19 @@ function Banking.depositAllItems(oreBoxId, oreConfig)
             if not Utils.waitOrTerminate(function()
                 return OreBox.getOreCount(oreConfig) == 0
             end, 10, 100, "Failed to deposit ore box contents") then
+                return false
+            end
+        end
+    end
+
+    if gemBagId then
+        local gemTotal = Utils.getGemBagTotal(gemBagId)
+        if gemTotal > 0 then
+            API.logInfo("Depositing gem bag contents...")
+            API.DoAction_Bank_Inv(gemBagId, 8, API.OFF_ACT_GeneralInterface_route2)
+            if not Utils.waitOrTerminate(function()
+                return Utils.getGemBagTotal(gemBagId) == 0
+            end, 10, 100, "Failed to deposit gem bag contents") then
                 return false
             end
         end
@@ -302,7 +318,12 @@ function Banking.depositToMetalBank(metalBankConfig, oreBoxId, oreConfig)
     end
 
     local initialOreBoxCount = oreBoxId and OreBox.getOreCount(oreConfig) or 0
-    local initialInventoryCount = oreConfig and Inventory:GetItemAmount(oreConfig.oreId) or 0
+    local initialInventoryCount = 0
+    if oreConfig and oreConfig.oreIds then
+        for _, id in ipairs(oreConfig.oreIds) do
+            initialInventoryCount = initialInventoryCount + Inventory:GetItemAmount(id)
+        end
+    end
 
     if initialOreBoxCount == 0 and initialInventoryCount == 0 then
         API.logInfo("No ores to deposit to metal bank")
@@ -314,18 +335,23 @@ function Banking.depositToMetalBank(metalBankConfig, oreBoxId, oreConfig)
 
     return Utils.waitOrTerminate(function()
         local oreBoxCount = oreBoxId and OreBox.getOreCount(oreConfig) or 0
-        local inventoryCount = oreConfig and Inventory:GetItemAmount(oreConfig.oreId) or 0
+        local inventoryCount = 0
+        if oreConfig and oreConfig.oreIds then
+            for _, id in ipairs(oreConfig.oreIds) do
+                inventoryCount = inventoryCount + Inventory:GetItemAmount(id)
+            end
+        end
         return oreBoxCount == 0 and inventoryCount == 0
     end, 10, 100, "Failed to deposit to metal bank")
 end
 
-function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfig, bankPin, selectedOre)
+function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfig, bankPin, selectedOre, miningLocationKey, gemBagId)
     if not bankLocation then
         API.logError("No banking location provided")
         return false
     end
 
-    if not Routes.travelTo(bankLocation) then
+    if not Routes.travelTo(bankLocation, nil, miningLocationKey) then
         return false
     end
 
@@ -340,7 +366,7 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
             return false
         end
 
-        if not Banking.depositAllItems(oreBoxId, oreConfig) then
+        if not Banking.depositAllItems(oreBoxId, oreConfig, gemBagId) then
             API.logWarn("Failed to deposit items")
             return false
         end

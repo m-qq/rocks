@@ -78,6 +78,18 @@ function Teleports.isLodestoneAvailable(lode)
     return API.isAbilityAvailable(lode.name .. " Lodestone")
 end
 
+local function waitReadyToTeleport()
+    if API.LocalPlayer_IsInCombat_() or API.ReadPlayerAnim() ~= 0 then
+        API.logInfo("Waiting to be ready to teleport...")
+        if not Utils.waitOrTerminate(function()
+            return not API.LocalPlayer_IsInCombat_() and API.ReadPlayerAnim() == 0
+        end, 10, 100, "Not ready to teleport - in combat or animating") then
+            return false
+        end
+    end
+    return true
+end
+
 function Teleports.lodestone(lode)
     if isAtLodestone(lode) then
         API.logInfo("Already at " .. lode.name .. " lodestone")
@@ -90,14 +102,7 @@ function Teleports.lodestone(lode)
         return false
     end
 
-    if API.ReadPlayerAnim() ~= 0 then
-        API.logInfo("Waiting for current action to finish...")
-        if not Utils.waitOrTerminate(function()
-            return API.ReadPlayerAnim() == 0
-        end, 10, 100, "Timed out waiting for action to finish") then
-            return false
-        end
-    end
+    if not waitReadyToTeleport() then return false end
 
     API.logInfo("Teleporting to " .. lode.name .. " lodestone...")
 
@@ -217,14 +222,7 @@ function Teleports.slayerCape(destinationKey)
         return false
     end
 
-    if API.ReadPlayerAnim() ~= 0 then
-        API.logInfo("Waiting for current action to finish...")
-        if not Utils.waitOrTerminate(function()
-            return API.ReadPlayerAnim() == 0
-        end, 10, 100, "Timed out waiting for action to finish") then
-            return false
-        end
-    end
+    if not waitReadyToTeleport() then return false end
 
     API.logInfo("Using Slayer cape to teleport to " .. dest.name .. "...")
     if inventorySlot then
@@ -351,14 +349,7 @@ function Teleports.dungeoneeringCape(destinationKey)
         return false
     end
 
-    if API.ReadPlayerAnim() ~= 0 then
-        API.logInfo("Waiting for current action to finish...")
-        if not Utils.waitOrTerminate(function()
-            return API.ReadPlayerAnim() == 0
-        end, 10, 100, "Timed out waiting for action to finish") then
-            return false
-        end
-    end
+    if not waitReadyToTeleport() then return false end
 
     API.logInfo("Using Dungeoneering cape to teleport to " .. dest.name .. "...")
     if inventorySlot then
@@ -425,14 +416,7 @@ function Teleports.ringOfKinship()
         return false
     end
 
-    if API.ReadPlayerAnim() ~= 0 then
-        API.logInfo("Waiting for current action to finish...")
-        if not Utils.waitOrTerminate(function()
-            return API.ReadPlayerAnim() == 0
-        end, 10, 100, "Timed out waiting for action to finish") then
-            return false
-        end
-    end
+    if not waitReadyToTeleport() then return false end
 
     if equipped then
         API.logInfo("Using equipped Ring of Kinship to teleport to Daemonheim...")
@@ -467,14 +451,7 @@ function Teleports.archJournal()
         return false
     end
 
-    if API.ReadPlayerAnim() ~= 0 then
-        API.logInfo("Waiting for current action to finish...")
-        if not Utils.waitOrTerminate(function()
-            return API.ReadPlayerAnim() == 0
-        end, 10, 100, "Timed out waiting for action to finish") then
-            return false
-        end
-    end
+    if not waitReadyToTeleport() then return false end
 
     if equipped then
         API.logInfo("Using equipped archaeology journal to teleport...")
@@ -511,14 +488,7 @@ function Teleports.memoryStrand()
         return false
     end
 
-    if API.ReadPlayerAnim() ~= 0 then
-        API.logInfo("Waiting for current action to finish...")
-        if not Utils.waitOrTerminate(function()
-            return API.ReadPlayerAnim() == 0
-        end, 10, 100, "Timed out waiting for action to finish") then
-            return false
-        end
-    end
+    if not waitReadyToTeleport() then return false end
 
     API.logInfo("Using memory strand to teleport to Memorial to Guthix...")
     API.DoAction_Interface(0x24, DATA.MEMORY_STRAND_ID, 1, 1473, 20, slot.interfaceSlot, API.OFF_ACT_GeneralInterface_route)
@@ -558,14 +528,7 @@ function Teleports.deepSeaFishingHub()
         return false
     end
 
-    if API.ReadPlayerAnim() ~= 0 then
-        API.logInfo("Waiting for current action to finish...")
-        if not Utils.waitOrTerminate(function()
-            return API.ReadPlayerAnim() == 0
-        end, 10, 100, "Timed out waiting for action to finish") then
-            return false
-        end
-    end
+    if not waitReadyToTeleport() then return false end
 
     API.logInfo("Teleporting to Deep Sea Fishing Hub...")
     API.DoAction_Interface(0xffffffff, GOTE_ID, action, 1464, 15, 2, API.OFF_ACT_GeneralInterface_route)
@@ -588,14 +551,7 @@ function Teleports.deepSeaFishingHub()
 end
 
 function Teleports.maxGuild()
-    if API.ReadPlayerAnim() ~= 0 then
-        API.logInfo("Waiting for current action to finish...")
-        if not Utils.waitOrTerminate(function()
-            return API.ReadPlayerAnim() == 0
-        end, 10, 100, "Timed out waiting for action to finish") then
-            return false
-        end
-    end
+    if not waitReadyToTeleport() then return false end
 
     API.logInfo("Teleporting to Max Guild...")
     API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1461, 1, 199, API.OFF_ACT_GeneralInterface_route)
@@ -624,14 +580,7 @@ function Teleports.maxGuild()
 end
 
 function Teleports.warsRetreat()
-    if API.ReadPlayerAnim() ~= 0 then
-        API.logInfo("Waiting for current action to finish...")
-        if not Utils.waitOrTerminate(function()
-            return API.ReadPlayerAnim() == 0
-        end, 10, 100, "Timed out waiting for action to finish") then
-            return false
-        end
-    end
+    if not waitReadyToTeleport() then return false end
 
     API.logInfo("Teleporting to War's Retreat...")
     API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1461, 1, 205, API.OFF_ACT_GeneralInterface_route)

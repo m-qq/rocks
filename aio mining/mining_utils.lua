@@ -221,6 +221,112 @@ function Utils.getStaminaPercent()
     return (current / max) * 100
 end
 
+local GEM_BAG_INFO = {
+    [18338] = { name = "Gem bag", capacity = 100, useVarbits = false },
+    [31455] = { name = "Upgraded gem bag", perGemCapacity = 60, useVarbits = true }
+}
+
+local GEM_BAG_VARBITS = {
+    sapphire = 22581,
+    emerald = 22582,
+    ruby = 22583,
+    diamond = 22584,
+    dragonstone = 22585
+}
+
+function Utils.getGemBagInfo(gemBagId)
+    return GEM_BAG_INFO[gemBagId]
+end
+
+function Utils.findGemBag()
+    for id, _ in pairs(GEM_BAG_INFO) do
+        if Inventory:Contains(id) then
+            return id
+        end
+    end
+    return nil
+end
+
+function Utils.getGemBagExtraInt(gemBagId)
+    local item = API.Container_Get_s(93, gemBagId)
+    if not item then return 0 end
+    return item.Extra_ints[2] or 0
+end
+
+function Utils.getGemCounts(gemBagId)
+    local info = GEM_BAG_INFO[gemBagId]
+    if info and info.useVarbits then
+        return {
+            sapphire = API.GetVarbitValue(GEM_BAG_VARBITS.sapphire),
+            emerald = API.GetVarbitValue(GEM_BAG_VARBITS.emerald),
+            ruby = API.GetVarbitValue(GEM_BAG_VARBITS.ruby),
+            diamond = API.GetVarbitValue(GEM_BAG_VARBITS.diamond),
+            dragonstone = API.GetVarbitValue(GEM_BAG_VARBITS.dragonstone)
+        }
+    end
+    local val = Utils.getGemBagExtraInt(gemBagId)
+    return {
+        sapphire = val % 256,
+        emerald = math.floor(val / 256) % 256,
+        ruby = math.floor(val / 65536) % 256,
+        diamond = math.floor(val / 16777216) % 256,
+        dragonstone = 0
+    }
+end
+
+function Utils.getGemBagTotal(gemBagId)
+    local counts = Utils.getGemCounts(gemBagId)
+    return counts.sapphire + counts.emerald + counts.ruby + counts.diamond + counts.dragonstone
+end
+
+function Utils.getGemBagCapacity(gemBagId)
+    local info = GEM_BAG_INFO[gemBagId]
+    if not info then return 0 end
+    if info.useVarbits then
+        return info.perGemCapacity * 5
+    end
+    return info.capacity
+end
+
+function Utils.isGemBagFull(gemBagId)
+    if not gemBagId then return true end
+    local info = GEM_BAG_INFO[gemBagId]
+    if info and info.useVarbits then
+        local counts = Utils.getGemCounts(gemBagId)
+        return counts.sapphire >= info.perGemCapacity
+            or counts.emerald >= info.perGemCapacity
+            or counts.ruby >= info.perGemCapacity
+            or counts.diamond >= info.perGemCapacity
+            or counts.dragonstone >= info.perGemCapacity
+    end
+    return Utils.getGemBagTotal(gemBagId) >= Utils.getGemBagCapacity(gemBagId)
+end
+
+function Utils.fillGemBag(gemBagId)
+    if not gemBagId then return false end
+    if not Inventory:IsOpen() then
+        local inventoryVarbit = API.GetVarbitValue(21816)
+        if inventoryVarbit == 1 then
+            API.DoAction_Interface(0xc2, 0xffffffff, 1, 1431, 0, 9, API.OFF_ACT_GeneralInterface_route)
+        elseif inventoryVarbit == 0 then
+            API.DoAction_Interface(0xc2, 0xffffffff, 1, 1432, 5, 1, API.OFF_ACT_GeneralInterface_route)
+        end
+        if not Utils.waitOrTerminate(function()
+            return Inventory:IsOpen()
+        end, 10, 100, "Failed to open inventory") then
+            return false
+        end
+    end
+    API.logInfo("Filling gem bag...")
+    local totalBefore = Utils.getGemBagTotal(gemBagId)
+    API.DoAction_Inventory1(gemBagId, 0, 1, API.OFF_ACT_GeneralInterface_route)
+    Utils.waitOrTerminate(function()
+        return Utils.getGemBagTotal(gemBagId) > totalBefore
+    end, 5, 100, "Failed to fill gem bag")
+    API.RandomSleep2(600, 200, 200)
+    return true
+end
+
 function Utils.ensureAtOreLocation(location, selectedOre)
     if not location.oreCoords or not location.oreCoords[selectedOre] then
         return true
@@ -306,7 +412,10 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
         return nil
     end
 
-    if useOreBox and not OreBox.validate(playerOreBox, oreConfig) then
+    if oreConfig.isGemRock then
+        useOreBox = false
+        playerOreBox = nil
+    elseif useOreBox and not OreBox.validate(playerOreBox, oreConfig) then
         useOreBox = false
         playerOreBox = nil
     end

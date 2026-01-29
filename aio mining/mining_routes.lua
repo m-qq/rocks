@@ -275,7 +275,7 @@ local function isAtDestination(destination, selectedOre)
     return distance <= 20
 end
 
-function Routes.selectRoute(destination)
+function Routes.selectRoute(destination, fromLocationKey)
     if destination.route then
         return destination.route
     end
@@ -288,6 +288,13 @@ function Routes.selectRoute(destination)
     for _, option in ipairs(destination.routeOptions) do
         if not option.condition then
             return option.route
+        end
+        if option.condition.fromLocation then
+            local matched = false
+            for _, loc in ipairs(option.condition.fromLocation) do
+                if loc == fromLocationKey then matched = true break end
+            end
+            if not matched then goto continue end
         end
         if option.condition.dungeoneeringCape then
             if Teleports.hasDungeoneeringCape() then
@@ -309,11 +316,12 @@ function Routes.selectRoute(destination)
         elseif option.condition.region and Utils.isAtRegion(option.condition.region) then
             return option.route
         end
+        ::continue::
     end
     return nil
 end
 
-function Routes.travelTo(destination, selectedOre)
+function Routes.travelTo(destination, selectedOre, fromLocationKey)
     if not destination then
         API.logError("No destination provided")
         return false
@@ -329,7 +337,7 @@ function Routes.travelTo(destination, selectedOre)
         return true
     end
 
-    local route = Routes.selectRoute(destination)
+    local route = Routes.selectRoute(destination, fromLocationKey)
 
     if not route then
         API.logError("No route defined for " .. destination.name)
@@ -419,6 +427,49 @@ Routes.TO_AL_KHARID_MINE_VIA_DUNGEONEERING_CAPE = {
     {
         action = { walk = { waypoints = {{x = 3300, y = 3294}} } },
         desc = "Walk to Al Kharid mine"
+    }
+}
+
+Routes.TO_AL_KHARID_GEM_ROCKS = {
+    {
+        action = { lodestone = Teleports.LODESTONES.AL_KHARID },
+        skip_if = { nearCoord = {x = 3297, y = 3185} },
+        desc = "Teleport to Al Kharid lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3307, y = 3217}, {x = 3306, y = 3244}, {x = 3301, y = 3272}, {x = 3299, y = 3313}} } },
+        desc = "Walk to Al Kharid gem rocks"
+    }
+}
+
+Routes.TO_AL_KHARID_GEM_ROCKS_VIA_ARCH_JOURNAL = {
+    {
+        action = { teleport = "archJournal" },
+        skip_if = { nearCoord = {x = 3336, y = 3378} },
+        desc = "Teleport to Archaeology Campus"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3315, y = 3349}, {x = 3291, y = 3333}, {x = 3291, y = 3309}} } },
+        desc = "Walk to Rocks shortcut"
+    },
+    {
+        action = { interact = { object = "Rocks", action = "Climb over" } },
+        wait = { anim = 3303 },
+        timeout = 15,
+        desc = "Climb over rocks - animation start"
+    },
+    {
+        wait = { anim = 0 },
+        timeout = 15,
+        desc = "Climb over rocks - animation end"
+    }
+}
+
+Routes.TO_AL_KHARID_GEM_ROCKS_VIA_DUNGEONEERING_CAPE = {
+    {
+        action = { teleport = "dungeoneeringCape", teleportArg = "al_kharid" },
+        skip_if = { nearCoord = {x = 3301, y = 3309} },
+        desc = "Teleport via Dungeoneering cape"
     }
 }
 

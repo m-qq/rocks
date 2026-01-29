@@ -18,12 +18,24 @@ local cfg = {
     ore = CONFIG.Ore,
     bankLocation = CONFIG.BankingLocation,
     dropOres = Utils.toBool(CONFIG.DropOres),
+    dropGems = Utils.toBool(CONFIG.DropGems),
     useOreBox = Utils.toBool(CONFIG.UseOreBox),
     chaseRockertunities = Utils.toBool(CONFIG.ChaseRockertunities),
     threeTickMining = Utils.toBool(CONFIG.ThreeTickMining),
+    cutAndDrop = Utils.toBool(CONFIG.CutAndDrop),
+    useGemBag = Utils.toBool(CONFIG.UseGemBag),
     bankPin = CONFIG.BankPin or "",
     staminaRefreshPercent = tonumber(CONFIG.StaminaRefreshPercent:match("%d+")) or 85,
 }
+
+if cfg.useGemBag then
+    cfg.dropGems = false
+    cfg.cutAndDrop = false
+end
+
+if cfg.cutAndDrop then
+    cfg.dropGems = false
+end
 
 if cfg.dropOres then
     cfg.useOreBox = false
@@ -31,6 +43,7 @@ end
 
 local state = {
     playerOreBox = nil,
+    gemBagId = nil,
     lastInteractTime = 0,
     lastInteractTick = 0,
     nextTickTarget = 0,
@@ -122,10 +135,10 @@ end
 local function mineRock(oreConfig)
     API.logInfo("Mining " .. oreConfig.name .. "...")
     Interact:Object(oreConfig.name, oreConfig.action, 25)
-    state.lastInteractTime = os.time()
-    if not Utils.waitOrTerminate(function() return isMiningActive() end, 30, 50, "Failed to start mining") then
+    if not Utils.waitOrTerminate(function() return isMiningActive() or Inventory:IsFull() end, 30, 50, "Failed to start mining") then
         return false
     end
+    state.lastInteractTime = os.time()
     API.RandomSleep2(300, 150, 100)
     return true
 end
@@ -151,6 +164,17 @@ if cfg.useOreBox then
     end
 end
 
+if cfg.useGemBag then
+    state.gemBagId = Utils.findGemBag()
+    if state.gemBagId then
+        local info = Utils.getGemBagInfo(state.gemBagId)
+        API.logInfo("Found gem bag: " .. info.name)
+    else
+        API.logError("Use Gem Bag is enabled but no gem bag found in inventory")
+        return
+    end
+end
+
 local validated = Utils.validateMiningSetup(
     cfg.location, cfg.ore, cfg.bankLocation,
     state.playerOreBox, cfg.useOreBox, cfg.dropOres
@@ -169,80 +193,146 @@ state.playerOreBox = validated.playerOreBox
 local oreBoxCapacity = state.playerOreBox and OreBox.getCapacity(state.playerOreBox, ore) or 0
 
 local function needsBanking()
-    if cfg.dropOres then
-        return false
-    end
+    if cfg.dropOres then return false end
+    if ore.isGemRock and (cfg.dropGems or cfg.cutAndDrop) then return false end
     local invFull = Inventory:IsFull()
+    if cfg.useGemBag and state.gemBagId then
+        return invFull and Utils.isGemBagFull(state.gemBagId)
+    end
     local boxFull = OreBox.isFull(state.playerOreBox, ore)
     return invFull and (not cfg.useOreBox or boxFull)
 end
 
-local function dropAllOres()
+local function waitForMiningToStop()
     if isMiningActive() then
-        API.logInfo("Waiting for mining to stop before dropping...")
+        API.logInfo("Waiting for mining to stop...")
         if not Utils.waitOrTerminate(function()
             return not isMiningActive()
         end, 10, 100, "Mining did not stop") then
-            return
+            return false
         end
         API.RandomSleep2(300, 150, 100)
     end
+    return true
+end
 
-    local oreId = ore.oreId
+local function dropItemById(oreId, displayName, useHotkey)
     local startCount = Inventory:GetItemAmount(oreId)
-    local oreName = ore.name:gsub(" rock$", " ore")
+    if startCount == 0 then return end
 
-    API.logInfo("Starting to drop " .. startCount .. " ores (ID: " .. oreId .. ")")
-    API.logInfo("Looking for action bar: '" .. oreName .. "'")
+    API.logInfo("Dropping " .. startCount .. " of " .. displayName .. " (ID: " .. oreId .. ")")
 
-    local oreAB = API.GetABs_name(oreName, true)
-    if oreAB and oreAB.hotkey and oreAB.hotkey > 0 then
-        API.logInfo("Found hotkey " .. oreAB.hotkey .. " - holding to drop all")
-        API.KeyboardDown(oreAB.hotkey)
+    if useHotkey then
+        local oreAB = API.GetABs_name(displayName, true)
+        if oreAB and oreAB.hotkey and oreAB.hotkey > 0 then
+            API.logInfo("Found hotkey " .. oreAB.hotkey .. " - holding to drop all")
+            API.KeyboardDown(oreAB.hotkey)
 
-        local dropStartTime = os.time()
-        while Inventory:GetItemAmount(oreId) > 0 and os.difftime(os.time(), dropStartTime) < 15 do
-            local currentCount = Inventory:GetItemAmount(oreId)
-            API.logInfo("Dropping... " .. currentCount .. " remaining")
-            API.RandomSleep2(500, 200, 200)
-        end
-
-        API.KeyboardUp(oreAB.hotkey)
-        local finalCount = Inventory:GetItemAmount(oreId)
-        API.logInfo("Released key. Dropped " .. (startCount - finalCount) .. " ores, " .. finalCount .. " remaining")
-
-        if finalCount > 0 then
-            API.logWarn("Failed to drop all ores via hotkey, switching to manual drop")
-            while Inventory:GetItemAmount(oreId) > 0 do
-                local countBefore = Inventory:GetItemAmount(oreId)
-                Inventory:Drop(oreId)
-                if not Utils.waitOrTerminate(function()
-                    return Inventory:GetItemAmount(oreId) < countBefore
-                end, 3, 50, "Failed to drop ore") then
-                    break
-                end
+            local dropStartTime = os.time()
+            while Inventory:GetItemAmount(oreId) > 0 and os.difftime(os.time(), dropStartTime) < 15 do
+                API.logInfo("Dropping... " .. Inventory:GetItemAmount(oreId) .. " remaining")
+                API.RandomSleep2(300, 100, 100)
             end
-        end
-    else
-        API.logInfo("No hotkey found - dropping manually one by one")
-        while Inventory:GetItemAmount(oreId) > 0 do
-            local countBefore = Inventory:GetItemAmount(oreId)
-            API.logInfo("Dropping ore... " .. countBefore .. " remaining")
-            Inventory:Drop(oreId)
 
-            if not Utils.waitOrTerminate(function()
-                return Inventory:GetItemAmount(oreId) < countBefore
-            end, 3, 50, "Failed to drop ore") then
-                break
-            end
+            API.KeyboardUp(oreAB.hotkey)
+            if Inventory:GetItemAmount(oreId) == 0 then return end
+            API.logWarn("Failed to drop all via hotkey, switching to manual drop")
         end
     end
 
-    local endCount = Inventory:GetItemAmount(oreId)
-    if endCount == 0 then
-        API.logInfo("Successfully dropped all " .. startCount .. " ores")
-    else
-        API.logError("Failed to drop all ores: started with " .. startCount .. ", still have " .. endCount)
+    while Inventory:GetItemAmount(oreId) > 0 do
+        local countBefore = Inventory:GetItemAmount(oreId)
+        API.DoAction_Inventory1(oreId, 0, 8, API.OFF_ACT_GeneralInterface_route2)
+        if not Utils.waitOrTerminate(function()
+            return Inventory:GetItemAmount(oreId) < countBefore
+        end, 3, 50, "Failed to drop") then
+            break
+        end
+        API.RandomSleep2(200, 100, 50)
+    end
+end
+
+local function dropAllOres()
+    if not waitForMiningToStop() then return end
+
+    local useHotkey = not ore.isGemRock
+    for _, oreId in ipairs(ore.oreIds) do
+        local displayName = ore.oreNames and ore.oreNames[oreId] or ore.name:gsub(" rock$", " ore")
+        dropItemById(oreId, displayName, useHotkey)
+    end
+end
+
+local GEM_CUTTING_INTERFACE = { { 1371,7,-1,0 }, { 1371,0,-1,0 }, { 1371,15,-1,0 }, { 1371,25,-1,0 }, { 1371,10,-1,0 }, { 1371,11,-1,0 }, { 1371,27,-1,0 }, { 1371,27,3,0 } }
+local GEM_CONFIRM_INTERFACE = { { 1370,0,-1,0 }, { 1370,2,-1,0 }, { 1370,4,-1,0 }, { 1370,5,-1,0 }, { 1370,13,-1,0 } }
+
+local function isGemCuttingInterfaceOpen()
+    local result = API.ScanForInterfaceTest2Get(false, GEM_CUTTING_INTERFACE)
+    return result[1] and result[1].textids == "Gem Cutting"
+end
+
+local function isCuttingGems()
+    local vbState = API.VB_FindPSettinOrder(2227)
+    return vbState and vbState.state == 1
+end
+
+local function cutGemType(gemId, gemName, cutName)
+    local count = Inventory:GetItemAmount(gemId)
+    if count == 0 then return end
+
+    API.logInfo("Cutting " .. count .. " " .. gemName .. "...")
+    API.DoAction_Inventory1(gemId, 0, 1, API.OFF_ACT_GeneralInterface_route)
+
+    if not Utils.waitOrTerminate(function()
+        return isGemCuttingInterfaceOpen()
+    end, 5, 100, "Failed to open gem cutting interface") then
+        return
+    end
+
+    local attempts = 0
+    while attempts < 10 do
+        local result = API.ScanForInterfaceTest2Get(false, GEM_CONFIRM_INTERFACE)
+        if result[1] and result[1].textids == cutName then
+            API.logInfo("Confirming " .. cutName .. " cutting")
+            API.KeyboardPress2(32, 60, 100)
+            break
+        end
+        API.RandomSleep2(75, 50, 25)
+        attempts = attempts + 1
+    end
+
+    if not Utils.waitOrTerminate(function()
+        return isCuttingGems()
+    end, 5, 100, "Failed to start cutting") then
+        return
+    end
+
+    Utils.waitOrTerminate(function()
+        return not isCuttingGems()
+    end, 30, 100, "Cutting timed out")
+
+    API.RandomSleep2(300, 150, 100)
+end
+
+local function cutAndDropGems()
+    if not waitForMiningToStop() then return end
+
+    local gemCutMap = {
+        [1623] = "Sapphire",
+        [1621] = "Emerald",
+        [1619] = "Ruby",
+        [1617] = "Diamond",
+        [1631] = "Dragonstone"
+    }
+
+    for _, gemId in ipairs(ore.oreIds) do
+        local gemName = ore.oreNames and ore.oreNames[gemId] or ("Gem " .. gemId)
+        local cutName = gemCutMap[gemId] or gemName
+        cutGemType(gemId, gemName, cutName)
+    end
+
+    for _, cutId in ipairs(ore.cutIds) do
+        local cutName = ore.cutNames and ore.cutNames[cutId] or ("Cut gem " .. cutId)
+        dropItemById(cutId, cutName, false)
     end
 end
 
@@ -270,6 +360,26 @@ local function drawStats()
     if state.playerOreBox then
         table.insert(statsTable, {"Ore box:", OreBox.getOreCount(ore) .. "/" .. oreBoxCapacity})
     end
+    if state.gemBagId then
+        local counts = Utils.getGemCounts(state.gemBagId)
+        local total = counts.sapphire + counts.emerald + counts.ruby + counts.diamond + counts.dragonstone
+        local capacity = Utils.getGemBagCapacity(state.gemBagId)
+        local info = Utils.getGemBagInfo(state.gemBagId)
+        local pgc = info and info.perGemCapacity
+        table.insert(statsTable, {"Gem bag:", total .. "/" .. capacity})
+        if pgc then
+            table.insert(statsTable, {"  Sapphire:", counts.sapphire .. "/" .. pgc})
+            table.insert(statsTable, {"  Emerald:", counts.emerald .. "/" .. pgc})
+            table.insert(statsTable, {"  Ruby:", counts.ruby .. "/" .. pgc})
+            table.insert(statsTable, {"  Diamond:", counts.diamond .. "/" .. pgc})
+            table.insert(statsTable, {"  Dragonstone:", counts.dragonstone .. "/" .. pgc})
+        else
+            table.insert(statsTable, {"  Sapphire:", tostring(counts.sapphire)})
+            table.insert(statsTable, {"  Emerald:", tostring(counts.emerald)})
+            table.insert(statsTable, {"  Ruby:", tostring(counts.ruby)})
+            table.insert(statsTable, {"  Diamond:", tostring(counts.diamond)})
+        end
+    end
     API.DrawTable(statsTable)
 end
 
@@ -289,17 +399,23 @@ while API.Read_LoopyLoop() do
     state.miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
     drawStats()
 
-    if cfg.dropOres and Inventory:IsFull() then
+    if Inventory:IsFull() and cfg.cutAndDrop and ore.isGemRock then
+        cutAndDropGems()
+    elseif Inventory:IsFull() and cfg.dropGems and ore.isGemRock then
+        dropAllOres()
+    elseif cfg.dropOres and Inventory:IsFull() then
         dropAllOres()
     elseif needsBanking() then
-        if not Banking.performBanking(bank, loc, state.playerOreBox, ore, cfg.bankPin, cfg.ore) then
+        if not Banking.performBanking(bank, loc, state.playerOreBox, ore, cfg.bankPin, cfg.ore, cfg.location, state.gemBagId) then
             break
         end
     elseif isNearOreLocation(loc, cfg.ore) then
         local invFull = Inventory:IsFull()
-        local rockertunity = cfg.chaseRockertunities and not invFull and findRockertunity(ore) or nil
+        local rockertunity = not ore.isGemRock and cfg.chaseRockertunities and not invFull and findRockertunity(ore) or nil
 
-        if invFull and cfg.useOreBox and state.playerOreBox then
+        if invFull and cfg.useGemBag and state.gemBagId and ore.isGemRock and not Utils.isGemBagFull(state.gemBagId) then
+            Utils.fillGemBag(state.gemBagId)
+        elseif invFull and not ore.isGemRock and cfg.useOreBox and state.playerOreBox and not OreBox.isFull(state.playerOreBox, ore) then
             OreBox.fill(state.playerOreBox)
         elseif cfg.threeTickMining then
             if rockertunity and canInteract() then
@@ -313,7 +429,8 @@ while API.Read_LoopyLoop() do
             if not mineRockertunity(ore, rockertunity) then break end
         elseif canInteract() then
             local staminaPercent = Utils.getStaminaPercent()
-            if state.miningLevel < 15 or not isMiningActive() or staminaPercent >= cfg.staminaRefreshPercent then
+            local miningInProgress = API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS) > 0
+            if state.miningLevel < 15 or not miningInProgress or staminaPercent >= cfg.staminaRefreshPercent then
                 if not mineRock(ore) then break end
             end
         end
