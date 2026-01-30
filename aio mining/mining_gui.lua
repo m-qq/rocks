@@ -308,11 +308,12 @@ local function drawConfigSummary(cfg)
         ImGui.TableSetupColumn("val", ImGuiTableColumnFlags.WidthStretch, 0.6)
         row("Ore", oreNames[cfg.oreIndex + 1])
         row("Location", locationNames[cfg.locationIndex + 1])
-        if not cfg.dropOres and not cfg.dropGems and not cfg.cutAndDrop then
-            row("Bank", bankNames[cfg.bankIndex + 1])
-        end
         local selectedOreKey = oreKeys[cfg.oreIndex + 1]
         local isGemRock = ORES[selectedOreKey] and ORES[selectedOreKey].isGemRock
+        local showBank = not (isGemRock and (cfg.dropGems or cfg.cutAndDrop)) and not (not isGemRock and cfg.dropOres)
+        if showBank then
+            row("Bank", bankNames[cfg.bankIndex + 1])
+        end
         if isGemRock then
             if cfg.useGemBag then row("Mode", "Use Gem Bag")
             elseif cfg.cutAndDrop then row("Mode", "Cut and Drop")
@@ -400,7 +401,10 @@ local function drawConfigTab(cfg, gui)
 
     -- Banking location (hidden when dropping/cutting)
     local isGemRock = ORES[selectedOreKey] and ORES[selectedOreKey].isGemRock
-    local needsBanking = not cfg.dropOres and not cfg.dropGems and not cfg.cutAndDrop
+    local effectiveDropGems = isGemRock and cfg.dropGems
+    local effectiveCutAndDrop = isGemRock and cfg.cutAndDrop
+    local effectiveDropOres = not isGemRock and cfg.dropOres
+    local needsBanking = not effectiveDropOres and not effectiveDropGems and not effectiveCutAndDrop
 
     if needsBanking then
         ImGui.PushStyleColor(ImGuiCol.Text, 0.9, 0.7, 0.3, 1.0)
