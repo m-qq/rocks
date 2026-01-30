@@ -39,7 +39,11 @@ Banking.LOCATIONS = {
     falador_east = {
         name = "Falador East",
         skip_if = { nearCoord = {x = 3012, y = 3354} },
-        route = Routes.TO_FALADOR_EAST_BANK,
+        routeOptions = {
+            { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 153, z = 12185} }, route = Routes.TO_FALADOR_EAST_BANK_FROM_DM_COAL },
+            { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_FALADOR_EAST_BANK_FROM_DM },
+            { route = Routes.TO_FALADOR_EAST_BANK }
+        },
         bank = {
             object = "Bank booth",
             action = "Bank"
@@ -99,6 +103,8 @@ Banking.LOCATIONS = {
         routeOptions = {
             { condition = { fromLocation = {"mining_guild_resource_dungeon"}, region = {x = 16, y = 70, z = 4166} }, route = Routes.TO_ARTISANS_GUILD_FURNACE_FROM_MGRD },
             { condition = { fromLocation = {"mining_guild"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_ARTISANS_GUILD_FURNACE_FROM_MG },
+            { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 153, z = 12185} }, route = Routes.TO_ARTISANS_GUILD_FURNACE_FROM_DM_COAL },
+            { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_ARTISANS_GUILD_FURNACE_FROM_DM },
             { route = Routes.TO_ARTISANS_GUILD_FURNACE }
         },
         metalBank = {
@@ -112,6 +118,8 @@ Banking.LOCATIONS = {
         routeOptions = {
             { condition = { fromLocation = {"mining_guild_resource_dungeon"}, region = {x = 16, y = 70, z = 4166} }, route = Routes.TO_ARTISANS_GUILD_BANK_FROM_MGRD },
             { condition = { fromLocation = {"mining_guild"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_ARTISANS_GUILD_BANK_FROM_MG },
+            { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 153, z = 12185} }, route = Routes.TO_ARTISANS_GUILD_BANK_FROM_DM_COAL },
+            { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_ARTISANS_GUILD_BANK_FROM_DM },
             { route = Routes.TO_ARTISANS_GUILD_BANK }
         },
         bank = {
@@ -198,7 +206,7 @@ local function depositItem(itemId, itemName)
     if count == 0 then return true end
 
     local action = count > 1 and 7 or 1
-    API.logInfo("Depositing " .. itemName .. " (count: " .. count .. ", action: " .. action .. ")")
+    API.printlua("Depositing " .. itemName .. " (count: " .. count .. ", action: " .. action .. ")", 0, false)
     API.DoAction_Bank_Inv(itemId, action, API.OFF_ACT_GeneralInterface_route2)
     return Utils.waitOrTerminate(function()
         return not Inventory:Contains(itemId)
@@ -212,11 +220,11 @@ end
 
 function Banking.openBank(bankLocation, bankPin)
     if not bankLocation or not bankLocation.bank then
-        API.logError("No bank config defined for location")
+        API.printlua("No bank config defined for location", 4, false)
         return false
     end
 
-    API.logInfo("Opening bank...")
+    API.printlua("Opening bank...", 5, false)
     local bank = bankLocation.bank
     local range = bank.range or 40
     if bank.npc then
@@ -237,12 +245,12 @@ function Banking.openBank(bankLocation, bankPin)
 
     if isBankPinOpen() then
         if not bankPin or bankPin == "" then
-            API.logError("Bank PIN required but not configured")
+            API.printlua("Bank PIN required but not configured", 4, false)
             API.Write_LoopyLoop(false)
             return false
         end
 
-        API.logInfo("Entering bank PIN...")
+        API.printlua("Entering bank PIN...", 0, false)
         API.DoBankPin(tonumber(bankPin))
 
         return Utils.waitOrTerminate(function()
@@ -275,7 +283,7 @@ function Banking.depositAllItems(oreBoxId, oreConfig, gemBagId)
     if oreBoxId and oreConfig then
         local currentCount = OreBox.getOreCount(oreConfig)
         if currentCount > 0 then
-            API.logInfo("Depositing ore box contents...")
+            API.printlua("Depositing ore box contents...", 5, false)
             API.DoAction_Bank_Inv(oreBoxId, 8, API.OFF_ACT_GeneralInterface_route2)
             if not Utils.waitOrTerminate(function()
                 return OreBox.getOreCount(oreConfig) == 0
@@ -288,7 +296,7 @@ function Banking.depositAllItems(oreBoxId, oreConfig, gemBagId)
     if gemBagId then
         local gemTotal = Utils.getGemBagTotal(gemBagId)
         if gemTotal > 0 then
-            API.logInfo("Depositing gem bag contents...")
+            API.printlua("Depositing gem bag contents...", 5, false)
             API.DoAction_Bank_Inv(gemBagId, 8, API.OFF_ACT_GeneralInterface_route2)
             if not Utils.waitOrTerminate(function()
                 return Utils.getGemBagTotal(gemBagId) == 0
@@ -313,7 +321,7 @@ end
 
 function Banking.depositToMetalBank(metalBankConfig, oreBoxId, oreConfig)
     if not metalBankConfig then
-        API.logError("No metal bank config provided")
+        API.printlua("No metal bank config provided", 4, false)
         return false
     end
 
@@ -326,11 +334,11 @@ function Banking.depositToMetalBank(metalBankConfig, oreBoxId, oreConfig)
     end
 
     if initialOreBoxCount == 0 and initialInventoryCount == 0 then
-        API.logInfo("No ores to deposit to metal bank")
+        API.printlua("No ores to deposit to metal bank", 0, false)
         return true
     end
 
-    API.logInfo("Depositing to metal bank...")
+    API.printlua("Depositing to metal bank...", 5, false)
     Interact:Object(metalBankConfig.object, metalBankConfig.action, metalBankConfig.range or 40)
 
     return Utils.waitOrTerminate(function()
@@ -347,7 +355,7 @@ end
 
 function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfig, bankPin, selectedOre, miningLocationKey, gemBagId)
     if not bankLocation then
-        API.logError("No banking location provided")
+        API.printlua("No banking location provided", 4, false)
         return false
     end
 
@@ -357,37 +365,37 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
 
     if bankLocation.metalBank then
         if not Banking.depositToMetalBank(bankLocation.metalBank, oreBoxId, oreConfig) then
-            API.logWarn("Failed to deposit to metal bank")
+            API.printlua("Failed to deposit to metal bank", 4, false)
             return false
         end
     else
         if not Banking.openBank(bankLocation, bankPin) then
-            API.logWarn("Failed to open bank")
+            API.printlua("Failed to open bank", 4, false)
             return false
         end
 
         if not Banking.depositAllItems(oreBoxId, oreConfig, gemBagId) then
-            API.logWarn("Failed to deposit items")
+            API.printlua("Failed to deposit items", 4, false)
             return false
         end
     end
 
-    API.logInfo("Banking complete")
+    API.printlua("Banking complete", 5, false)
 
     if miningLocation then
         API.RandomSleep2(600, 300, 300)
         if not Routes.travelTo(miningLocation, selectedOre) then
-            API.logWarn("Failed to return to mining area")
+            API.printlua("Failed to return to mining area", 4, false)
             return false
         end
 
         if miningLocation.oreWaypoints and miningLocation.oreWaypoints[selectedOre] then
             if not Utils.walkThroughWaypoints(miningLocation.oreWaypoints[selectedOre]) then
-                API.logWarn("Failed to walk through ore waypoints")
+                API.printlua("Failed to walk through ore waypoints", 4, false)
                 return false
             end
             if not Utils.ensureAtOreLocation(miningLocation, selectedOre) then
-                API.logWarn("Failed to reach ore location after banking")
+                API.printlua("Failed to reach ore location after banking", 4, false)
                 return false
             end
         end

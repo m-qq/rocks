@@ -91,7 +91,35 @@ DATA.INTERFACES = {
     DUNGEONEERING_CAPE_DWARVEN = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,5,-1,0 }, { 720,21,-1,0 } },
     DUNGEONEERING_CAPE_KARAMJA = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,7,-1,0 }, { 720,27,-1,0 } },
     DUNGEONEERING_CAPE_MINING_GUILD = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,10,-1,0 }, { 720,36,-1,0 } },
-    DUNGEONEERING_CAPE_KALGERION = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,12,-1,0 }, { 720,42,-1,0 } }
+    DUNGEONEERING_CAPE_KALGERION = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,12,-1,0 }, { 720,42,-1,0 } },
+    GEM_CUTTING = { { 1371,7,-1,0 }, { 1371,0,-1,0 }, { 1371,15,-1,0 }, { 1371,25,-1,0 }, { 1371,10,-1,0 }, { 1371,11,-1,0 }, { 1371,27,-1,0 }, { 1371,27,3,0 } }
+}
+
+DATA.VARBIT_IDS.INVENTORY_STATE = 21816
+
+DATA.GEM_BAG_INFO = {
+    [18338] = { name = "Gem bag", capacity = 100, useVarbits = false },
+    [31455] = { name = "Upgraded gem bag", perGemCapacity = 60, useVarbits = true }
+}
+
+DATA.GEM_BAG_VARBITS = {
+    sapphire = 22581,
+    emerald = 22582,
+    ruby = 22583,
+    diamond = 22584,
+    dragonstone = 22585
+}
+
+DATA.MINING_STAMINA_LEVELS = {
+    {level = 88, stamina = 110},
+    {level = 71, stamina = 100},
+    {level = 67, stamina = 90},
+    {level = 57, stamina = 80},
+    {level = 46, stamina = 70},
+    {level = 33, stamina = 60},
+    {level = 26, stamina = 50},
+    {level = 19, stamina = 40},
+    {level = 15, stamina = 30}
 }
 
 DATA.MEMORY_STRAND_SLOTS = {

@@ -158,6 +158,9 @@ local MINING_LOCATIONS = {
         name = "Dwarven Mine",
         routeOptions = {
             { condition = { dungeoneeringCape = true }, route = Routes.TO_DWARVEN_MINE_VIA_DUNGEONEERING_CAPE },
+            { condition = { nearCoord = {x = 3043, y = 3340} }, route = Routes.TO_DWARVEN_MINE_FROM_ARTISANS_GUILD_FURNACE },
+            { condition = { nearCoord = {x = 3061, y = 3340} }, route = Routes.TO_DWARVEN_MINE_FROM_ARTISANS_GUILD_BANK },
+            { condition = { nearCoord = {x = 3012, y = 3354} }, route = Routes.TO_DWARVEN_MINE_FROM_FALADOR_EAST_BANK },
             { route = Routes.TO_DWARVEN_MINE }
         },
         ores = {"iron", "coal", "luminite"},

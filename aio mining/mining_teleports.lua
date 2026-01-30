@@ -51,7 +51,7 @@ local function isLodestoneNetworkOpen()
 end
 
 local function openLodestoneNetwork()
-    API.logInfo("Opening lodestone network...")
+    API.printlua("Opening lodestone network...", 5, false)
     API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1465, 33, -1, API.OFF_ACT_GeneralInterface_route)
     return Utils.waitOrTerminate(function()
         return isLodestoneNetworkOpen()
@@ -65,7 +65,7 @@ local function teleportViaNetwork(lode)
         end
     end
     API.RandomSleep2(300, 100, 50)
-    API.logInfo("Selecting " .. lode.name .. " lodestone...")
+    API.printlua("Selecting " .. lode.name .. " lodestone...", 0, false)
     API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1092, lode.interfaceId, -1, API.OFF_ACT_GeneralInterface_route)
     return true
 end
@@ -80,7 +80,7 @@ end
 
 local function waitReadyToTeleport()
     if API.LocalPlayer_IsInCombat_() or API.ReadPlayerAnim() ~= 0 then
-        API.logInfo("Waiting to be ready to teleport...")
+        API.printlua("Waiting to be ready to teleport...", 0, false)
         if not Utils.waitOrTerminate(function()
             return not API.LocalPlayer_IsInCombat_() and API.ReadPlayerAnim() == 0
         end, 10, 100, "Not ready to teleport - in combat or animating") then
@@ -92,19 +92,19 @@ end
 
 function Teleports.lodestone(lode)
     if isAtLodestone(lode) then
-        API.logInfo("Already at " .. lode.name .. " lodestone")
+        API.printlua("Already at " .. lode.name .. " lodestone", 0, false)
         return true
     end
 
     if not isLodestoneUnlocked(lode) then
-        API.logError(lode.name .. " lodestone is not unlocked")
+        API.printlua(lode.name .. " lodestone is not unlocked", 4, false)
         API.Write_LoopyLoop(false)
         return false
     end
 
     if not waitReadyToTeleport() then return false end
 
-    API.logInfo("Teleporting to " .. lode.name .. " lodestone...")
+    API.printlua("Teleporting to " .. lode.name .. " lodestone...", 5, false)
 
     local useNetwork = false
     if Teleports.isLodestoneAvailable(lode) then
@@ -120,17 +120,17 @@ function Teleports.lodestone(lode)
     end
 
     if useNetwork then
-        API.logInfo("Using lodestone network interface...")
+        API.printlua("Using lodestone network interface...", 0, false)
         if not teleportViaNetwork(lode) then
             return false
         end
         if not API.CheckAnim(200) then
-            API.logError("Failed to start teleport animation")
+            API.printlua("Failed to start teleport animation", 4, false)
             return false
         end
     end
 
-    API.logInfo("Waiting for teleport animation...")
+    API.printlua("Waiting for teleport animation...", 0, false)
     if not Utils.waitOrTerminate(function()
         return isAtLodestone(lode)
     end, 20, 100, "Failed to teleport to " .. lode.name .. " lodestone") then
@@ -138,7 +138,7 @@ function Teleports.lodestone(lode)
     end
     Utils.waitOrTerminate(function() return API.ReadPlayerAnim() > 0 end, 10, 100, "Teleport animation did not start")
     Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Teleport animation did not finish")
-    API.logInfo("Teleport complete")
+    API.printlua("Teleport complete", 0, false)
     API.RandomSleep2(600, 300, 50)
     return true
 end
@@ -200,7 +200,7 @@ local SLAYER_CAPE_ACTIONS = {
 function Teleports.slayerCape(destinationKey)
     local dest = Teleports.SLAYER_DESTINATIONS[destinationKey]
     if not dest then
-        API.logError("Unknown Slayer cape destination: " .. tostring(destinationKey))
+        API.printlua("Unknown Slayer cape destination: " .. tostring(destinationKey), 4, false)
         return false
     end
 
@@ -218,13 +218,13 @@ function Teleports.slayerCape(destinationKey)
     end
 
     if not capeId then
-        API.logWarn("No Slayer cape found")
+        API.printlua("No Slayer cape found", 4, false)
         return false
     end
 
     if not waitReadyToTeleport() then return false end
 
-    API.logInfo("Using Slayer cape to teleport to " .. dest.name .. "...")
+    API.printlua("Using Slayer cape to teleport to " .. dest.name .. "...", 5, false)
     if inventorySlot then
         local params = SLAYER_CAPE_ACTIONS[capeId]
         API.DoAction_Interface(0x24, capeId, params.action, 1473, 5, inventorySlot, params.route)
@@ -240,7 +240,7 @@ function Teleports.slayerCape(destinationKey)
     end
 
     if dest.pageKey then
-        API.logInfo("Navigating to next page...")
+        API.printlua("Navigating to next page...", 0, false)
         API.KeyboardPress33(dest.pageKey, 0, 100, 50)
     end
 
@@ -250,14 +250,14 @@ function Teleports.slayerCape(destinationKey)
     end, 10, 100, dest.name .. " option not found") then
         local result = API.ScanForInterfaceTest2Get(false, dest.interface)
         if #result > 0 then
-            API.logError("Found instead: " .. tostring(result[1].textids))
+            API.printlua("Found instead: " .. tostring(result[1].textids), 4, false)
         else
-            API.logError("No interface results found")
+            API.printlua("No interface results found", 4, false)
         end
         return false
     end
 
-    API.logInfo("Selecting " .. dest.name .. "...")
+    API.printlua("Selecting " .. dest.name .. "...", 0, false)
     API.KeyboardPress33(dest.selectKey, 0, 100, 50)
 
     if not Utils.waitOrTerminate(function()
@@ -268,7 +268,7 @@ function Teleports.slayerCape(destinationKey)
         return false
     end
     Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Teleport animation did not finish")
-    API.logInfo("Slayer cape teleport complete")
+    API.printlua("Slayer cape teleport complete", 0, false)
     return true
 end
 
@@ -327,7 +327,7 @@ local DUNGEONEERING_CAPE_ACTIONS = {
 function Teleports.dungeoneeringCape(destinationKey)
     local dest = Teleports.DUNGEONEERING_DESTINATIONS[destinationKey]
     if not dest then
-        API.logError("Unknown Dungeoneering cape destination: " .. tostring(destinationKey))
+        API.printlua("Unknown Dungeoneering cape destination: " .. tostring(destinationKey), 4, false)
         return false
     end
 
@@ -345,13 +345,13 @@ function Teleports.dungeoneeringCape(destinationKey)
     end
 
     if not capeId then
-        API.logWarn("No Dungeoneering cape found")
+        API.printlua("No Dungeoneering cape found", 4, false)
         return false
     end
 
     if not waitReadyToTeleport() then return false end
 
-    API.logInfo("Using Dungeoneering cape to teleport to " .. dest.name .. "...")
+    API.printlua("Using Dungeoneering cape to teleport to " .. dest.name .. "...", 5, false)
     if inventorySlot then
         local params = DUNGEONEERING_CAPE_ACTIONS[capeId]
         API.DoAction_Interface(0x24, capeId, params.action, 1473, 5, inventorySlot, params.route)
@@ -367,7 +367,7 @@ function Teleports.dungeoneeringCape(destinationKey)
     end
 
     if dest.pageKey then
-        API.logInfo("Navigating to next page...")
+        API.printlua("Navigating to next page...", 0, false)
         API.KeyboardPress33(dest.pageKey, 0, 100, 50)
     end
 
@@ -377,14 +377,14 @@ function Teleports.dungeoneeringCape(destinationKey)
     end, 10, 100, dest.name .. " option not found") then
         local result = API.ScanForInterfaceTest2Get(false, dest.interface)
         if #result > 0 then
-            API.logError("Found instead: " .. tostring(result[1].textids))
+            API.printlua("Found instead: " .. tostring(result[1].textids), 4, false)
         else
-            API.logError("No interface results found")
+            API.printlua("No interface results found", 4, false)
         end
         return false
     end
 
-    API.logInfo("Selecting " .. dest.name .. "...")
+    API.printlua("Selecting " .. dest.name .. "...", 0, false)
     API.KeyboardPress33(dest.selectKey, 0, 100, 50)
 
     if not Utils.waitOrTerminate(function()
@@ -395,7 +395,7 @@ function Teleports.dungeoneeringCape(destinationKey)
         return false
     end
     Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Teleport animation did not finish")
-    API.logInfo("Dungeoneering cape teleport complete")
+    API.printlua("Dungeoneering cape teleport complete", 0, false)
     return true
 end
 
@@ -412,17 +412,17 @@ function Teleports.ringOfKinship()
     local equipped = hasItemInEquipment(DATA.RING_OF_KINSHIP_ID, 13)
 
     if not inInventory and not equipped then
-        API.logWarn("No Ring of Kinship found in inventory or equipped")
+        API.printlua("No Ring of Kinship found in inventory or equipped", 4, false)
         return false
     end
 
     if not waitReadyToTeleport() then return false end
 
     if equipped then
-        API.logInfo("Using equipped Ring of Kinship to teleport to Daemonheim...")
+        API.printlua("Using equipped Ring of Kinship to teleport to Daemonheim...", 5, false)
         API.DoAction_Interface(0xffffffff, DATA.RING_OF_KINSHIP_ID, 3, 1464, 15, 12, API.OFF_ACT_GeneralInterface_route)
     else
-        API.logInfo("Using Ring of Kinship from inventory to teleport to Daemonheim...")
+        API.printlua("Using Ring of Kinship from inventory to teleport to Daemonheim...", 5, false)
         API.DoAction_Inventory1(DATA.RING_OF_KINSHIP_ID, 0, 3, API.OFF_ACT_GeneralInterface_route)
     end
 
@@ -437,7 +437,7 @@ function Teleports.ringOfKinship()
     end
     Utils.waitOrTerminate(function() return API.ReadPlayerAnim() > 0 end, 10, 100, "Second teleport animation did not start")
     Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Second teleport animation did not finish")
-    API.logInfo("Teleport complete")
+    API.printlua("Teleport complete", 0, false)
     API.RandomSleep2(600, 300, 50)
     return true
 end
@@ -447,19 +447,19 @@ function Teleports.archJournal()
     local equipped = hasItemInEquipment(DATA.ARCH_JOURNAL_ID, 18)
 
     if not inInventory and not equipped then
-        API.logWarn("No archaeology journal found in inventory or equipped")
+        API.printlua("No archaeology journal found in inventory or equipped", 4, false)
         return false
     end
 
     if not waitReadyToTeleport() then return false end
 
     if equipped then
-        API.logInfo("Using equipped archaeology journal to teleport...")
+        API.printlua("Using equipped archaeology journal to teleport...", 5, false)
         API.DoAction_Interface(0xffffffff, DATA.ARCH_JOURNAL_ID, 2, 1464, 15, 17, API.OFF_ACT_GeneralInterface_route)
     else
         local journal = Inventory:GetItem(DATA.ARCH_JOURNAL_ID)
         local slot = journal[1].slot
-        API.logInfo("Using archaeology journal (inventory slot " .. slot .. ") to teleport...")
+        API.printlua("Using archaeology journal (inventory slot " .. slot .. ") to teleport...", 5, false)
         API.DoAction_Inventory1(DATA.ARCH_JOURNAL_ID, 0, 7, API.OFF_ACT_GeneralInterface_route2)
     end
 
@@ -480,17 +480,21 @@ local function findMemoryStrandSlot()
     return nil
 end
 
+function Teleports.hasMemoryStrandFavorited()
+    return findMemoryStrandSlot() ~= nil
+end
+
 function Teleports.memoryStrand()
     local slot = findMemoryStrandSlot()
     if not slot then
-        API.logError("No memory strands favorited - terminating")
+        API.printlua("No memory strands favorited - terminating", 4, false)
         API.Write_LoopyLoop(false)
         return false
     end
 
     if not waitReadyToTeleport() then return false end
 
-    API.logInfo("Using memory strand to teleport to Memorial to Guthix...")
+    API.printlua("Using memory strand to teleport to Memorial to Guthix...", 5, false)
     API.DoAction_Interface(0x24, DATA.MEMORY_STRAND_ID, 1, 1473, 20, slot.interfaceSlot, API.OFF_ACT_GeneralInterface_route)
 
     API.RandomSleep2(600, 300, 300)
@@ -509,7 +513,7 @@ end
 
 function Teleports.deepSeaFishingHub()
     if not hasItemInEquipment(GOTE_ID, 3) then
-        API.logError("Grace of the Elves necklace not equipped")
+        API.printlua("Grace of the Elves necklace not equipped", 4, false)
         API.Write_LoopyLoop(false)
         return false
     end
@@ -523,14 +527,14 @@ function Teleports.deepSeaFishingHub()
     elseif portal1 == 16 then
         action = 2
     else
-        API.logError("Deep Sea Fishing Hub is not set as a Grace of the Elves portal destination. Please configure it via the necklace.")
+        API.printlua("Deep Sea Fishing Hub is not set as a Grace of the Elves portal destination. Please configure it via the necklace.", 4, false)
         API.Write_LoopyLoop(false)
         return false
     end
 
     if not waitReadyToTeleport() then return false end
 
-    API.logInfo("Teleporting to Deep Sea Fishing Hub...")
+    API.printlua("Teleporting to Deep Sea Fishing Hub...", 5, false)
     API.DoAction_Interface(0xffffffff, GOTE_ID, action, 1464, 15, 2, API.OFF_ACT_GeneralInterface_route)
 
     if not Utils.waitOrTerminate(function()
@@ -546,14 +550,14 @@ function Teleports.deepSeaFishingHub()
         return false
     end
 
-    API.logInfo("Deep Sea Fishing Hub teleport complete")
+    API.printlua("Deep Sea Fishing Hub teleport complete", 0, false)
     return true
 end
 
 function Teleports.maxGuild()
     if not waitReadyToTeleport() then return false end
 
-    API.logInfo("Teleporting to Max Guild...")
+    API.printlua("Teleporting to Max Guild...", 5, false)
     API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1461, 1, 199, API.OFF_ACT_GeneralInterface_route)
 
     if not Utils.waitOrTerminate(function()
@@ -570,19 +574,19 @@ function Teleports.maxGuild()
 
     local coord = API.PlayerCoord()
     if coord.x ~= 2276 or coord.y ~= 3313 then
-        API.logError("Max Guild teleport landed at wrong location (" .. coord.x .. ", " .. coord.y .. "). Talk to Elen Anterth in the Max Guild to change your teleport location to be inside the tower.")
+        API.printlua("Max Guild teleport landed at wrong location (" .. coord.x .. ", " .. coord.y .. "). Talk to Elen Anterth in the Max Guild to change your teleport location to be inside the tower.", 4, false)
         API.Write_LoopyLoop(false)
         return false
     end
 
-    API.logInfo("Max Guild teleport complete")
+    API.printlua("Max Guild teleport complete", 0, false)
     return true
 end
 
 function Teleports.warsRetreat()
     if not waitReadyToTeleport() then return false end
 
-    API.logInfo("Teleporting to War's Retreat...")
+    API.printlua("Teleporting to War's Retreat...", 5, false)
     API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1461, 1, 205, API.OFF_ACT_GeneralInterface_route)
 
     if not Utils.waitOrTerminate(function()
@@ -598,7 +602,7 @@ function Teleports.warsRetreat()
         return false
     end
 
-    API.logInfo("War's Retreat teleport complete")
+    API.printlua("War's Retreat teleport complete", 0, false)
     return true
 end
 

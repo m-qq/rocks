@@ -12,7 +12,7 @@ end
 
 function idleHandler.check()
     if API.GetGameState2() ~= 3 or API.GetLocalPlayerAddress() == 0 then
-        API.logError("Invalid game state or player address - terminating")
+        API.printlua("Invalid game state or player address - terminating", 4, false)
         API.Write_LoopyLoop(false)
         return false
     end
@@ -21,7 +21,7 @@ function idleHandler.check()
         idleHandler.randomTime = math.random(5*60, 9*60)
         idleHandler.startTime = API.ScriptRuntime()
         API.PIdle2()
-        API.logInfo("Anti-idle triggered")
+        API.printlua("Anti-idle triggered", 0, false)
     end
     return true
 end

@@ -80,7 +80,7 @@ function OreBox.fill(boxId)
         return false
     end
     if not Inventory:IsOpen() then
-        local inventoryVarbit = API.GetVarbitValue(21816)
+        local inventoryVarbit = API.GetVarbitValue(DATA.VARBIT_IDS.INVENTORY_STATE)
         if inventoryVarbit == 1 then
             API.DoAction_Interface(0xc2, 0xffffffff, 1, 1431, 0, 9, API.OFF_ACT_GeneralInterface_route)
         elseif inventoryVarbit == 0 then
@@ -92,7 +92,7 @@ function OreBox.fill(boxId)
             return false
         end
     end
-    API.logInfo("Filling ore box...")
+    API.printlua("Filling ore box...", 5, false)
     if API.DoAction_Inventory1(boxId, 0, 1, API.OFF_ACT_GeneralInterface_route) then
         API.RandomSleep2(600, 200, 200)
         return true
@@ -125,7 +125,7 @@ function OreBox.validate(boxId, oreConfig)
     end
     if not OreBox.canStore(boxId, oreConfig) then
         local oreName = oreConfig.name:gsub(" rock$", "")
-        API.logWarn(OreBox.getName(boxId) .. " cannot store " .. oreName .. " (tier " .. oreConfig.tier .. ") - continuing without ore box")
+        API.printlua(OreBox.getName(boxId) .. " cannot store " .. oreName .. " (tier " .. oreConfig.tier .. ") - continuing without ore box", 4, false)
         return false
     end
     return true

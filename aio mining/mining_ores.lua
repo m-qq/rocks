@@ -1,5 +1,6 @@
 local ORES = {
 
+    -- Tier 1
     copper = {
         name = "Copper rock",
         action = "Mine",
@@ -18,6 +19,8 @@ local ORES = {
         oresomeKey = "TIN",
         capacityBoostLevel = 7
     },
+
+    -- Tier 10
     iron = {
         name = "Iron rock",
         action = "Mine",
@@ -27,6 +30,8 @@ local ORES = {
         oresomeKey = "IRON",
         capacityBoostLevel = 18
     },
+
+    -- Tier 20
     coal = {
         name = "Coal rock",
         action = "Mine",
@@ -45,6 +50,17 @@ local ORES = {
         oresomeKey = nil,
         capacityBoostLevel = nil
     },
+    uncommon_gem_rock = {
+        name = "Uncommon gem rock",
+        action = "Mine",
+        oreIds = {1623, 1621, 1619},
+        oreNames = {[1623] = "Uncut sapphire", [1621] = "Uncut emerald", [1619] = "Uncut ruby"},
+        cutIds = {1607, 1605, 1603},
+        tier = 20,
+        isGemRock = true
+    },
+
+    -- Tier 30
     mithril = {
         name = "Mithril rock",
         action = "Mine",
@@ -54,6 +70,8 @@ local ORES = {
         oresomeKey = "MITHRIL",
         capacityBoostLevel = 37
     },
+
+    -- Tier 40
     adamant = {
         name = "Adamantite rock",
         action = "Mine",
@@ -81,6 +99,8 @@ local ORES = {
         oresomeKey = nil,
         capacityBoostLevel = nil
     },
+
+    -- Tier 50
     runite = {
         name = "Runite rock",
         action = "Mine",
@@ -90,6 +110,8 @@ local ORES = {
         oresomeKey = "RUNITE",
         capacityBoostLevel = 55
     },
+
+    -- Tier 60
     orichalcite = {
         name = "Orichalcite rock",
         action = "Mine",
@@ -108,6 +130,8 @@ local ORES = {
         oresomeKey = "DRAKOLITH",
         capacityBoostLevel = 66
     },
+
+    -- Tier 70
     necrite = {
         name = "Necrite rock",
         action = "Mine",
@@ -126,6 +150,8 @@ local ORES = {
         oresomeKey = "PHASMATITE",
         capacityBoostLevel = 72
     },
+
+    -- Tier 80
     banite = {
         name = "Banite rock",
         action = "Mine",
@@ -135,6 +161,8 @@ local ORES = {
         oresomeKey = "BANE",
         capacityBoostLevel = 85
     },
+
+    -- Tier 90
     light_animica = {
         name = "Light animica rock",
         action = "Mine",
@@ -153,6 +181,8 @@ local ORES = {
         oresomeKey = "DARK_ANIMICA",
         capacityBoostLevel = 95
     },
+
+    -- Tier 100 (Dungeoneering)
     novite = {
         name = "Novite rock",
         action = "Mine",
@@ -243,6 +273,8 @@ local ORES = {
         oresomeKey = "PROMETHIUM",
         capacityBoostLevel = 102,
     },
+
+    -- Tier 104
     platinum = {
         name = "Platinum rock",
         action = "Mine",
@@ -252,16 +284,6 @@ local ORES = {
         oresomeKey = nil,
         capacityBoostLevel = nil
     },
-    uncommon_gem_rock = {
-        name = "Uncommon gem rock",
-        action = "Mine",
-        oreIds = {1623, 1621, 1619},
-        oreNames = {[1623] = "Uncut sapphire", [1621] = "Uncut emerald", [1619] = "Uncut ruby"},
-        cutIds = {1607, 1605, 1603},
-        cutNames = {[1607] = "Sapphire", [1605] = "Emerald", [1603] = "Ruby"},
-        tier = 20,
-        isGemRock = true
-    }
 }
 
 return ORES

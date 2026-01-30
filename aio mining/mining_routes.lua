@@ -98,11 +98,11 @@ local function executeStep(step)
     local desc = step.desc or "Step"
 
     if shouldSkipStep(step.skip_if) then
-        API.logInfo("Route: Skipping " .. desc)
+        API.printlua("Route: Skipping " .. desc, 0, false)
         return true
     end
 
-    API.logInfo("Route: " .. desc)
+    API.printlua("Route: " .. desc, 0, false)
 
     if step.action then
         if step.action.lodestone then
@@ -143,7 +143,7 @@ local function executeStep(step)
                             return true
                         end
                         if API.ReadPlayerAnim() == step.retryOnAnim then
-                            API.logInfo("Route: Failed attempt, retrying...")
+                            API.printlua("Route: Failed attempt, retrying...", 0, false)
                             while os.time() - startTime < timeout do
                                 if API.ReadPlayerAnim() == 0 then break end
                                 API.RandomSleep2(100, 50, 50)
@@ -177,7 +177,7 @@ local function executeStep(step)
 
                 API.RandomSleep2(100, 50, 50)
             end
-            API.logError("Failed: " .. desc)
+            API.printlua("Failed: " .. desc, 4, false)
             API.Write_LoopyLoop(false)
             return false
         else
@@ -194,14 +194,14 @@ end
 
 function Routes.execute(route)
     for i, step in ipairs(route) do
-        API.logInfo("Executing route step " .. i .. "/" .. #route)
+        API.printlua("Executing route step " .. i .. "/" .. #route, 0, false)
         if not executeStep(step) then
-            API.logError("Route failed at step " .. i)
+            API.printlua("Route failed at step " .. i, 4, false)
             return false
         end
         API.RandomSleep2(300, 150, 100)
     end
-    API.logInfo("Route completed successfully")
+    API.printlua("Route completed successfully", 0, false)
     return true
 end
 
@@ -211,7 +211,7 @@ function Routes.checkLodestones(route)
         if step.action and step.action.lodestone then
             local lode = step.action.lodestone
             if not Teleports.isLodestoneAvailable(lode) then
-                API.logWarn(lode.name .. " Lodestone not on action bar - will use lodestone network")
+                API.printlua(lode.name .. " Lodestone not on action bar - will use lodestone network", 4, false)
             end
         end
     end
@@ -223,7 +223,7 @@ function Routes.validateLodestonesUnlocked(route)
         if step.action and step.action.lodestone then
             local lode = step.action.lodestone
             if not Teleports.isLodestoneUnlocked(lode) then
-                API.logError(lode.name .. " lodestone is not unlocked")
+                API.printlua(lode.name .. " lodestone is not unlocked", 4, false)
                 return false
             end
         end
@@ -323,41 +323,49 @@ end
 
 function Routes.travelTo(destination, selectedOre, fromLocationKey)
     if not destination then
-        API.logError("No destination provided")
+        API.printlua("No destination provided", 4, false)
         return false
     end
 
     if isAtDestination(destination, selectedOre) then
-        API.logInfo("Already at " .. destination.name)
+        API.printlua("Already at " .. destination.name, 0, false)
         return true
     end
 
     if shouldSkipStep(destination.skip_if) then
-        API.logInfo("Already at " .. destination.name)
+        API.printlua("Already at " .. destination.name, 0, false)
         return true
     end
 
     local route = Routes.selectRoute(destination, fromLocationKey)
 
     if not route then
-        API.logError("No route defined for " .. destination.name)
+        API.printlua("No route defined for " .. destination.name, 4, false)
         return false
     end
 
-    API.logInfo("Traveling to " .. destination.name .. "...")
+    -- Close bank if open before teleporting
+    if API.BankOpen2() then
+        API.KeyboardPress2(0x1B, 60, 100)
+        Utils.waitOrTerminate(function()
+            return not API.Compare2874Status(24, true)
+        end, 5, 100, "Bank did not close")
+    end
+
+    API.printlua("Traveling to " .. destination.name .. "...", 5, false)
     if not Routes.execute(route) then
-        API.logWarn("Route to " .. destination.name .. " failed")
+        API.printlua("Route to " .. destination.name .. " failed", 4, false)
         return false
     end
 
     if selectedOre and not (destination.oreWaypoints and destination.oreWaypoints[selectedOre]) then
         if not Utils.ensureAtOreLocation(destination, selectedOre) then
-            API.logWarn("Failed to reach ore location")
+            API.printlua("Failed to reach ore location", 4, false)
             return false
         end
     end
 
-    API.logInfo("Arrived at " .. destination.name)
+    API.printlua("Arrived at " .. destination.name, 0, false)
     return true
 end
 
@@ -797,6 +805,210 @@ Routes.TO_DWARVEN_MINE_VIA_DUNGEONEERING_CAPE = {
         action = { teleport = "dungeoneeringCape", teleportArg = "dwarven_mine" },
         skip_if = { nearCoord = {x = 3037, y = 9774} },
         desc = "Teleport via Dungeoneering cape"
+    }
+}
+
+Routes.TO_ARTISANS_GUILD_FURNACE_FROM_DM = {
+    {
+        action = { walk = { waypoints = {{x = 3056, y = 9776}} } },
+        desc = "Walk to stairs"
+    },
+    {
+        action = { interact = { object = "Stairs", action = "Climb-up" } },
+        wait = { nearCoord = {x = 3061, y = 3376}, nearObject = {id = 11714, type = 12, maxDistance = 20} },
+        timeout = 20,
+        desc = "Climb up stairs"
+    },
+    {
+        action = { interact = { object = "Door", action = "Open", tile = WPOINT.new(3061, 3374, 0) } },
+        skip_if = { objectState = {id = 11714, type = 12, value = 1} },
+        wait = { objectState = {id = 11714, type = 12, value = 1} },
+        timeout = 10,
+        desc = "Open door"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3039, y = 3340}} } },
+        desc = "Walk to Artisans Guild furnace"
+    }
+}
+
+Routes.TO_ARTISANS_GUILD_FURNACE_FROM_DM_COAL = {
+    {
+        action = { walk = { waypoints = {{x = 3043, y = 9798}, {x = 3057, y = 9777}} } },
+        desc = "Walk to stairs"
+    },
+    {
+        action = { interact = { object = "Stairs", action = "Climb-up" } },
+        wait = { nearCoord = {x = 3061, y = 3376}, nearObject = {id = 11714, type = 12, maxDistance = 20} },
+        timeout = 20,
+        desc = "Climb up stairs"
+    },
+    {
+        action = { interact = { object = "Door", action = "Open", tile = WPOINT.new(3061, 3374, 0) } },
+        skip_if = { objectState = {id = 11714, type = 12, value = 1} },
+        wait = { objectState = {id = 11714, type = 12, value = 1} },
+        timeout = 10,
+        desc = "Open door"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3039, y = 3340}} } },
+        desc = "Walk to Artisans Guild furnace"
+    }
+}
+
+Routes.TO_ARTISANS_GUILD_BANK_FROM_DM = {
+    {
+        action = { walk = { waypoints = {{x = 3056, y = 9776}} } },
+        desc = "Walk to stairs"
+    },
+    {
+        action = { interact = { object = "Stairs", action = "Climb-up" } },
+        wait = { nearCoord = {x = 3061, y = 3376}, nearObject = {id = 11714, type = 12, maxDistance = 20} },
+        timeout = 20,
+        desc = "Climb up stairs"
+    },
+    {
+        action = { interact = { object = "Door", action = "Open", tile = WPOINT.new(3061, 3374, 0) } },
+        skip_if = { objectState = {id = 11714, type = 12, value = 1} },
+        wait = { objectState = {id = 11714, type = 12, value = 1} },
+        timeout = 10,
+        desc = "Open door"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3058, y = 3340}} } },
+        desc = "Walk to Artisans Guild bank"
+    }
+}
+
+Routes.TO_ARTISANS_GUILD_BANK_FROM_DM_COAL = {
+    {
+        action = { walk = { waypoints = {{x = 3043, y = 9798}, {x = 3057, y = 9777}} } },
+        desc = "Walk to stairs"
+    },
+    {
+        action = { interact = { object = "Stairs", action = "Climb-up" } },
+        wait = { nearCoord = {x = 3061, y = 3376}, nearObject = {id = 11714, type = 12, maxDistance = 20} },
+        timeout = 20,
+        desc = "Climb up stairs"
+    },
+    {
+        action = { interact = { object = "Door", action = "Open", tile = WPOINT.new(3061, 3374, 0) } },
+        skip_if = { objectState = {id = 11714, type = 12, value = 1} },
+        wait = { objectState = {id = 11714, type = 12, value = 1} },
+        timeout = 10,
+        desc = "Open door"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3058, y = 3340}} } },
+        desc = "Walk to Artisans Guild bank"
+    }
+}
+
+Routes.TO_FALADOR_EAST_BANK_FROM_DM = {
+    {
+        action = { walk = { waypoints = {{x = 3056, y = 9776}} } },
+        desc = "Walk to stairs"
+    },
+    {
+        action = { interact = { object = "Stairs", action = "Climb-up" } },
+        wait = { nearCoord = {x = 3061, y = 3376}, nearObject = {id = 11714, type = 12, maxDistance = 20} },
+        timeout = 20,
+        desc = "Climb up stairs"
+    },
+    {
+        action = { interact = { object = "Door", action = "Open", tile = WPOINT.new(3061, 3374, 0) } },
+        skip_if = { objectState = {id = 11714, type = 12, value = 1} },
+        wait = { objectState = {id = 11714, type = 12, value = 1} },
+        timeout = 10,
+        desc = "Open door"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3032, y = 3367}, {x = 3013, y = 3356}} } },
+        desc = "Walk to Falador East bank"
+    }
+}
+
+Routes.TO_FALADOR_EAST_BANK_FROM_DM_COAL = {
+    {
+        action = { walk = { waypoints = {{x = 3043, y = 9798}, {x = 3057, y = 9777}} } },
+        desc = "Walk to stairs"
+    },
+    {
+        action = { interact = { object = "Stairs", action = "Climb-up" } },
+        wait = { nearCoord = {x = 3061, y = 3376}, nearObject = {id = 11714, type = 12, maxDistance = 20} },
+        timeout = 20,
+        desc = "Climb up stairs"
+    },
+    {
+        action = { interact = { object = "Door", action = "Open", tile = WPOINT.new(3061, 3374, 0) } },
+        skip_if = { objectState = {id = 11714, type = 12, value = 1} },
+        wait = { objectState = {id = 11714, type = 12, value = 1} },
+        timeout = 10,
+        desc = "Open door"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3032, y = 3367}, {x = 3013, y = 3356}} } },
+        desc = "Walk to Falador East bank"
+    }
+}
+
+Routes.TO_DWARVEN_MINE_FROM_ARTISANS_GUILD_FURNACE = {
+    {
+        action = { walk = { waypoints = {{x = 3060, y = 3372}} } },
+        desc = "Walk to Dwarven Mine entrance"
+    },
+    {
+        action = { interact = { object = "Door", action = "Open", tile = WPOINT.new(3061, 3374, 0) } },
+        skip_if = { objectState = {id = 11714, type = 12, value = 1} },
+        wait = { objectState = {id = 11714, type = 12, value = 1} },
+        timeout = 10,
+        desc = "Open door"
+    },
+    {
+        action = { interact = { object = "Stairs", action = "Climb-down", tile = WPOINT.new(3060, 3377, 0) } },
+        wait = { region = {x = 47, y = 152, z = 12184} },
+        timeout = 20,
+        desc = "Climb down stairs"
+    }
+}
+
+Routes.TO_DWARVEN_MINE_FROM_ARTISANS_GUILD_BANK = {
+    {
+        action = { walk = { waypoints = {{x = 3060, y = 3372}} } },
+        desc = "Walk to Dwarven Mine entrance"
+    },
+    {
+        action = { interact = { object = "Door", action = "Open", tile = WPOINT.new(3061, 3374, 0) } },
+        skip_if = { objectState = {id = 11714, type = 12, value = 1} },
+        wait = { objectState = {id = 11714, type = 12, value = 1} },
+        timeout = 10,
+        desc = "Open door"
+    },
+    {
+        action = { interact = { object = "Stairs", action = "Climb-down", tile = WPOINT.new(3060, 3377, 0) } },
+        wait = { region = {x = 47, y = 152, z = 12184} },
+        timeout = 20,
+        desc = "Climb down stairs"
+    }
+}
+
+Routes.TO_DWARVEN_MINE_FROM_FALADOR_EAST_BANK = {
+    {
+        action = { walk = { waypoints = {{x = 3032, y = 3367}, {x = 3060, y = 3372}} } },
+        desc = "Walk to Dwarven Mine entrance"
+    },
+    {
+        action = { interact = { object = "Door", action = "Open", tile = WPOINT.new(3061, 3374, 0) } },
+        skip_if = { objectState = {id = 11714, type = 12, value = 1} },
+        wait = { objectState = {id = 11714, type = 12, value = 1} },
+        timeout = 10,
+        desc = "Open door"
+    },
+    {
+        action = { interact = { object = "Stairs", action = "Climb-down", tile = WPOINT.new(3060, 3377, 0) } },
+        wait = { region = {x = 47, y = 152, z = 12184} },
+        timeout = 20,
+        desc = "Climb down stairs"
     }
 }
 
