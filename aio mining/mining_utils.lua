@@ -543,8 +543,10 @@ function Utils.findRockertunity(oreConfig)
 
     for _, rockertunity in ipairs(rockertunities) do
         for _, rock in ipairs(targetRocks) do
+            local customDist = oreConfig.rockertunityDist and oreConfig.rockertunityDist[rock.Id]
             local distance = Utils.getDistance(rock.Tile_XYZ.x, rock.Tile_XYZ.y, rockertunity.Tile_XYZ.x, rockertunity.Tile_XYZ.y)
-            if distance < 1 then
+            local match = customDist and (distance <= customDist) or (distance < 1)
+            if match then
                 return {
                     id = rock.Id,
                     x = rock.Tile_XYZ.x,
@@ -569,7 +571,7 @@ function Utils.mineRockertunity(oreConfig, rockTarget, state)
         local rockertunities = API.GetAllObjArray1(DATA.ROCKERTUNITY_IDS, 20, {4})
         for _, rockertunity in ipairs(rockertunities) do
             local distance = Utils.getDistance(rockTarget.x, rockTarget.y, rockertunity.Tile_XYZ.x, rockertunity.Tile_XYZ.y)
-            if distance < 1 then
+            if distance <= math.sqrt(2) then
                 return false
             end
         end

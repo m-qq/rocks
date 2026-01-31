@@ -209,6 +209,9 @@ local ORES = {
         vbInBox = 55886,
         oresomeKey = "MARMAROS",
         capacityBoostLevel = 102,
+        rockertunityDist = {
+            [130805] = math.sqrt(2),
+        },
     },
     kratonium = {
         name = "Kratonium rock",
@@ -263,6 +266,9 @@ local ORES = {
         vbInBox = 55904,
         oresomeKey = "GORGONITE",
         capacityBoostLevel = 102,
+        rockertunityDist = {
+            [130793] = math.sqrt(2),
+        },
     },
     promethium = {
         name = "Promethium rock",
