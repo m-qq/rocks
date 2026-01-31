@@ -240,6 +240,7 @@ function Banking.openBank(bankLocation, bankPin)
     end
 
     if API.BankOpen2() then
+        API.RandomSleep2(600, 600, 300)
         return true
     end
 
@@ -253,9 +254,13 @@ function Banking.openBank(bankLocation, bankPin)
         API.printlua("Entering bank PIN...", 0, false)
         API.DoBankPin(tonumber(bankPin))
 
-        return Utils.waitOrTerminate(function()
+        if not Utils.waitOrTerminate(function()
             return API.BankOpen2()
-        end, 10, 100, "Failed to open bank after entering PIN")
+        end, 10, 100, "Failed to open bank after entering PIN") then
+            return false
+        end
+        API.RandomSleep2(600, 600, 300)
+        return true
     end
 
     return false

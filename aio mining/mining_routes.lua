@@ -350,6 +350,7 @@ function Routes.travelTo(destination, selectedOre, fromLocationKey)
         Utils.waitOrTerminate(function()
             return not API.Compare2874Status(24, true)
         end, 5, 100, "Bank did not close")
+        API.RandomSleep2(600, 600, 300)
     end
 
     API.printlua("Traveling to " .. destination.name .. "...", 5, false)
