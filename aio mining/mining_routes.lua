@@ -389,6 +389,11 @@ Routes.TO_AL_KHARID_MINE_VIA_ARCH_JOURNAL = {
         desc = "Teleport to Archaeology Campus"
     },
     {
+        action = { walk = { waypoints = {{x = 3335, y = 3378}} } },
+        skip_if = { nearCoord = {x = 3335, y = 3378, maxDistance = 15} },
+        desc = "Walk from bank to Archaeology Campus"
+    },
+    {
         action = { walk = { waypoints = {{x = 3315, y = 3349}, {x = 3291, y = 3333}, {x = 3291, y = 3309}} } },
         desc = "Walk to Rocks shortcut"
     },
@@ -458,6 +463,11 @@ Routes.TO_AL_KHARID_GEM_ROCKS_VIA_ARCH_JOURNAL = {
         desc = "Teleport to Archaeology Campus"
     },
     {
+        action = { walk = { waypoints = {{x = 3335, y = 3378}} } },
+        skip_if = { nearCoord = {x = 3335, y = 3378, maxDistance = 15} },
+        desc = "Walk from bank to Archaeology Campus"
+    },
+    {
         action = { walk = { waypoints = {{x = 3315, y = 3349}, {x = 3291, y = 3333}, {x = 3291, y = 3309}} } },
         desc = "Walk to Rocks shortcut"
     },
@@ -501,6 +511,11 @@ Routes.TO_AL_KHARID_RESOURCE_DUNGEON_VIA_ARCH_JOURNAL = {
         action = { teleport = "archJournal" },
         skip_if = { nearCoord = {x = 3336, y = 3378} },
         desc = "Teleport to Archaeology Campus"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3335, y = 3378}} } },
+        skip_if = { nearCoord = {x = 3335, y = 3378, maxDistance = 15} },
+        desc = "Walk from bank to Archaeology Campus"
     },
     {
         action = { walk = { waypoints = {{x = 3315, y = 3349}, {x = 3291, y = 3333}, {x = 3291, y = 3309}} } },
