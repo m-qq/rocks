@@ -466,7 +466,8 @@ function Banking.withdrawJuju(potionDef)
     end
 
     API.printlua("Withdrawing juju potion (dose " .. potion.dose .. ")...", 0, false)
-    API.DoAction_Bank(potion.id, 2, API.OFF_ACT_GeneralInterface_route)
+    local withdrawAction = API.GetVarbitValue(45189) == 2 and 1 or 2
+    API.DoAction_Bank(potion.id, withdrawAction, API.OFF_ACT_GeneralInterface_route)
 
     if not Utils.waitOrTerminate(function()
         return Banking.findJujuInInventory(potionDef) ~= nil
@@ -500,7 +501,8 @@ function Banking.withdrawSummoningPouch(familiarDef)
     end
 
     API.printlua("Withdrawing " .. familiarDef.name .. " pouch...", 0, false)
-    API.DoAction_Bank(familiarDef.pouchId, 2, API.OFF_ACT_GeneralInterface_route)
+    local withdrawAction = API.GetVarbitValue(45189) == 2 and 1 or 2
+    API.DoAction_Bank(familiarDef.pouchId, withdrawAction, API.OFF_ACT_GeneralInterface_route)
 
     if not Utils.waitOrTerminate(function()
         return Banking.findSummoningPouchInInventory(familiarDef)

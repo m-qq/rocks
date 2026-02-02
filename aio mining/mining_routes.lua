@@ -224,12 +224,15 @@ function Routes.execute(route)
     return true
 end
 
+local lodestoneWarned = {}
+
 function Routes.checkLodestones(route)
     if not route then return end
     for _, step in ipairs(route) do
         if step.action and step.action.lodestone then
             local lode = step.action.lodestone
-            if not Teleports.isLodestoneAvailable(lode) then
+            if not lodestoneWarned[lode.name] and not Teleports.isLodestoneAvailable(lode) then
+                lodestoneWarned[lode.name] = true
                 API.printlua(lode.name .. " Lodestone not on action bar - will use lodestone network", 4, false)
             end
         end
