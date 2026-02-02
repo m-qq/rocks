@@ -127,6 +127,15 @@ Banking.LOCATIONS = {
             action = "Use"
         }
     },
+    ithell = {
+        name = "Ithell Bank Chest",
+        skip_if = { nearCoord = {x = 2154, y = 3340} },
+        route = Routes.TO_ITHELL_BANK,
+        bank = {
+            object = "Bank chest",
+            action = "Use"
+        }
+    },
     prifddinas = {
         name = "Prifddinas",
         skip_if = { nearCoord = {x = 2208, y = 3360} },
@@ -284,6 +293,12 @@ function Banking.depositAllItems(oreBoxId, oreConfig, gemBagId)
     if gemBagId then
         keepItems[gemBagId] = true
     end
+    for id in pairs(DATA.ALL_JUJU_IDS) do
+        keepItems[id] = true
+    end
+    for id in pairs(DATA.ALL_SUMMONING_POUCH_IDS) do
+        keepItems[id] = true
+    end
 
     if oreBoxId and oreConfig then
         local currentCount = OreBox.getOreCount(oreConfig)
@@ -358,7 +373,103 @@ function Banking.depositToMetalBank(metalBankConfig, oreBoxId, oreConfig)
     end, 10, 100, "Failed to deposit to metal bank")
 end
 
-function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfig, bankPin, selectedOre, miningLocationKey, gemBagId)
+function Banking.findJujuInInventory(potionDef)
+    for _, potion in ipairs(potionDef.potions) do
+        if API.Container_Check_Items(93, {potion.id}) then
+            return potion
+        end
+    end
+    return nil
+end
+
+local function findBestJujuInBank(potionDef)
+    for _, potion in ipairs(potionDef.potions) do
+        if API.Container_Check_Items(95, {potion.id}) then
+            return potion
+        end
+    end
+    return nil
+end
+
+local function disableNotedMode()
+    local vb = API.VB_FindPSettinOrder(160)
+    if vb and vb.state == 1 then
+        API.printlua("Disabling noted withdraw mode...", 0, false)
+        API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 517, 127, -1, API.OFF_ACT_GeneralInterface_route)
+        if not Utils.waitOrTerminate(function()
+            local v = API.VB_FindPSettinOrder(160)
+            return v and v.state == 0
+        end, 5, 100, "Failed to disable noted mode") then
+            return false
+        end
+    end
+    return true
+end
+
+function Banking.withdrawJuju(potionDef)
+    if not API.BankOpen2() then return false end
+
+    if Banking.findJujuInInventory(potionDef) then return true end
+
+    if not disableNotedMode() then return false end
+
+    local potion = findBestJujuInBank(potionDef)
+    if not potion then
+        API.printlua("No juju potions found in bank", 4, false)
+        return false
+    end
+
+    API.printlua("Withdrawing juju potion (dose " .. potion.dose .. ")...", 0, false)
+    API.DoAction_Bank(potion.id, 2, API.OFF_ACT_GeneralInterface_route)
+
+    if not Utils.waitOrTerminate(function()
+        return Banking.findJujuInInventory(potionDef) ~= nil
+    end, 5, 100, "Failed to withdraw juju potion") then
+        return false
+    end
+
+    return true
+end
+
+function Banking.findSummoningPouchInInventory(familiarDef)
+    if API.Container_Check_Items(93, {familiarDef.pouchId}) then
+        return true
+    end
+    return false
+end
+
+local function findSummoningPouchInBank(familiarDef)
+    if API.Container_Check_Items(95, {familiarDef.pouchId}) then
+        return true
+    end
+    return false
+end
+
+function Banking.withdrawSummoningPouch(familiarDef)
+    if not API.BankOpen2() then return false end
+
+    if Banking.findSummoningPouchInInventory(familiarDef) then return true end
+
+    if not disableNotedMode() then return false end
+
+    if not findSummoningPouchInBank(familiarDef) then
+        API.printlua("No " .. familiarDef.name .. " pouches found in bank", 4, false)
+        return false
+    end
+
+    API.printlua("Withdrawing " .. familiarDef.name .. " pouch...", 0, false)
+    API.DoAction_Bank(familiarDef.pouchId, 2, API.OFF_ACT_GeneralInterface_route)
+
+    if not Utils.waitOrTerminate(function()
+        return Banking.findSummoningPouchInInventory(familiarDef)
+    end, 5, 100, "Failed to withdraw summoning pouch") then
+        return false
+    end
+
+    return true
+end
+
+function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfig, bankPin, selectedOre, miningLocationKey, gemBagId, jujuDef, familiarDef)
     if not bankLocation then
         API.printlua("No banking location provided", 4, false)
         return false
@@ -382,6 +493,18 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
         if not Banking.depositAllItems(oreBoxId, oreConfig, gemBagId) then
             API.printlua("Failed to deposit items", 4, false)
             return false
+        end
+
+        if jujuDef then
+            if not Banking.withdrawJuju(jujuDef) then
+                Banking.jujuWarning = "No juju potions available in bank"
+            end
+        end
+
+        if familiarDef then
+            if not Banking.withdrawSummoningPouch(familiarDef) then
+                Banking.familiarWarning = "No " .. familiarDef.name .. " pouches available in bank"
+            end
         end
     end
 

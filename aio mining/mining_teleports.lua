@@ -590,7 +590,9 @@ function Teleports.warsRetreat()
     API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1461, 1, 205, API.OFF_ACT_GeneralInterface_route)
 
     if not Utils.waitOrTerminate(function()
-        return API.ReadPlayerAnim() == 8941
+        local coord = API.PlayerCoord()
+        local anim = API.ReadPlayerAnim()
+        return anim == 8941 or (anim == 0 and coord.x == 3294 and coord.y == 10127)
     end, 15, 100, "Failed to start War's Retreat teleport") then
         return false
     end

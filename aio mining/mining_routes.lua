@@ -84,6 +84,15 @@ local function shouldSkipStep(skip_if)
         end
     end
 
+    if skip_if.nearCoords then
+        for _, nc in ipairs(skip_if.nearCoords) do
+            local dist = Utils.getDistance(coord.x, coord.y, nc.x, nc.y)
+            if dist <= (nc.maxDistance or 40) then
+                return true
+            end
+        end
+    end
+
     if skip_if.objectState then
         local objects = API.GetAllObjArray1({skip_if.objectState.id}, 50, {skip_if.objectState.type or 12})
         if #objects > 0 and objects[1].Bool1 == skip_if.objectState.value then
@@ -1715,6 +1724,91 @@ Routes.TO_MAX_GUILD_BANK = {
         action = { teleport = "maxGuild" },
         skip_if = { nearCoord = {x = 2276, y = 3313} },
         desc = "Teleport to Max Guild"
+    }
+}
+
+Routes.TO_ITHELL_BANK = {
+    {
+        action = { lodestone = Teleports.LODESTONES.PRIFDDINAS },
+        skip_if = { nearCoords = {{x = 2208, y = 3360}, {x = 2154, y = 3340}, {x = 2145, y = 3346}} },
+        desc = "Teleport to Prifddinas lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2185, y = 3361}, {x = 2171, y = 3345}, {x = 2154, y = 3340}} } },
+        skip_if = { nearCoord = {x = 2145, y = 3346} },
+        desc = "Walk to Ithell bank"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2154, y = 3340}} } },
+        desc = "Walk to Ithell bank chest"
+    }
+}
+
+Routes.TO_EDIMMU_CRYSTAL_SANDSTONE = {
+    {
+        action = { lodestone = Teleports.LODESTONES.PRIFDDINAS },
+        skip_if = { nearCoord = {x = 2208, y = 3360} },
+        desc = "Teleport to Prifddinas lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2208, y = 3384}, {x = 2230, y = 3397}} } },
+        desc = "Walk to Edimmu resource dungeon entrance"
+    },
+    {
+        action = { interact = { object = "Mysterious entrance", action = "Enter" } },
+        wait = { region = {x = 21, y = 72, z = 5448}, anim = 0 },
+        timeout = 20,
+        desc = "Enter resource dungeon"
+    },
+    {
+        action = { walk = { waypoints = {{x = 1388, y = 4617}} } },
+        desc = "Walk to crystal-flecked sandstone"
+    }
+}
+
+Routes.TO_ITHELL_CRYSTAL_SANDSTONE = {
+    {
+        action = { lodestone = Teleports.LODESTONES.PRIFDDINAS },
+        skip_if = { nearCoords = {{x = 2208, y = 3360}, {x = 2153, y = 3340}} },
+        desc = "Teleport to Prifddinas lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2185, y = 3361}, {x = 2162, y = 3361}, {x = 2145, y = 3352}} } },
+        skip_if = { nearCoord = {x = 2153, y = 3340} },
+        desc = "Walk to crystal-flecked sandstone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2145, y = 3352}} } },
+        desc = "Walk to crystal-flecked sandstone"
+    }
+}
+
+Routes.TO_ITHELL_SOFT_CLAY = {
+    {
+        action = { lodestone = Teleports.LODESTONES.PRIFDDINAS },
+        skip_if = { nearCoords = {{x = 2208, y = 3360}, {x = 2153, y = 3340}} },
+        desc = "Teleport to Prifddinas lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2185, y = 3361}, {x = 2162, y = 3361}, {x = 2145, y = 3346}} } },
+        skip_if = { nearCoord = {x = 2153, y = 3340} },
+        desc = "Walk to Ithell soft clay mine"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2145, y = 3346}} } },
+        desc = "Walk to soft clay rocks"
+    }
+}
+
+Routes.TO_PRIFDDINAS_SEREN_STONES = {
+    {
+        action = { lodestone = Teleports.LODESTONES.PRIFDDINAS },
+        skip_if = { nearCoord = {x = 2221, y = 3301} },
+        desc = "Teleport to Prifddinas lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2208, y = 3338}, {x = 2208, y = 3311}, {x = 2219, y = 3301}} } },
+        desc = "Walk to Seren stones"
     }
 }
 

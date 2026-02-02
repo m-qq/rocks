@@ -66,8 +66,9 @@ local MINING_LOCATIONS = {
             { condition = { archJournal = true }, route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON_VIA_ARCH_JOURNAL },
             { route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON }
         },
-        ores = {"drakolith", "necrite"},
+        ores = {"precious_gem_rock", "drakolith", "necrite"},
         oreCoords = {
+            precious_gem_rock = {x = 1185, y = 4509},
             drakolith = {x = 1175, y = 4516},
             necrite = {x = 1191, y = 4513}
         },
@@ -395,6 +396,49 @@ local MINING_LOCATIONS = {
             promethium = {x = 3494, y = 3633}
         },
         requiredLevels = {{skill = "DUNGEONEERING", level = 30}}
+    },
+
+    edimmu_crystal_sandstone = {
+        name = "Edimmu Resource Dungeon",
+        route = Routes.TO_EDIMMU_CRYSTAL_SANDSTONE,
+        ores = {"crystal_sandstone"},
+        oreCoords = {
+            crystal_sandstone = {x = 1388, y = 4617}
+        },
+        dailyLimit = { varbit = 26001, max = 25 },
+        requiredVarbits = {{varbit = 24967, value = 1, message = "Prifddinas lodestone not unlocked"}},
+        requiredLevels = {{skill = "DUNGEONEERING", level = 115}}
+    },
+
+    ithell_crystal_sandstone = {
+        name = "Ithell",
+        route = Routes.TO_ITHELL_CRYSTAL_SANDSTONE,
+        ores = {"crystal_sandstone"},
+        oreCoords = {
+            crystal_sandstone = {x = 2145, y = 3352}
+        },
+        dailyLimit = { varbit = 25870, max = 50 },
+        requiredVarbits = {{varbit = 24967, value = 1, message = "Prifddinas lodestone not unlocked"}}
+    },
+
+    ithell_soft_clay = {
+        name = "Ithell",
+        route = Routes.TO_ITHELL_SOFT_CLAY,
+        ores = {"soft_clay"},
+        oreCoords = {
+            soft_clay = {x = 2145, y = 3346}
+        },
+        requiredVarbits = {{varbit = 24967, value = 1, message = "Prifddinas lodestone not unlocked"}}
+    },
+
+    prifddinas_seren_stones = {
+        name = "Prifddinas",
+        route = Routes.TO_PRIFDDINAS_SEREN_STONES,
+        ores = {"seren_stones"},
+        oreCoords = {
+            seren_stones = {x = 2221, y = 3301}
+        },
+        requiredVarbits = {{varbit = 24967, value = 1, message = "Prifddinas lodestone not unlocked"}}
     }
 }
 

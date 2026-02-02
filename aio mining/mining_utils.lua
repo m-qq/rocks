@@ -3,12 +3,6 @@ local DATA = require("aio mining/mining_data")
 
 local Utils = {}
 
-function Utils.toBool(value)
-    if type(value) == "boolean" then return value end
-    if type(value) == "string" then return value == "true" end
-    return false
-end
-
 local function waitForCondition(condition, timeout, checkInterval)
     timeout = timeout or 10
     checkInterval = checkInterval or 50
@@ -195,12 +189,6 @@ end
 
 function Utils.getStaminaDrain()
     return API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS)
-end
-
-function Utils.getStaminaRemaining()
-    local drain = Utils.getStaminaDrain()
-    local max = Utils.calculateMaxStamina()
-    return math.max(0, math.min(max, max - drain))
 end
 
 function Utils.getStaminaPercent()
@@ -391,7 +379,11 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
         return fail("Mining level " .. miningLevel .. " is below required level " .. oreConfig.tier .. " for " .. oreConfig.name)
     end
 
-    if oreConfig.isGemRock then
+    if oreConfig.isStackable then
+        useOreBox = false
+        playerOreBox = nil
+        skipBanking = true
+    elseif oreConfig.isGemRock or oreConfig.noOreBox then
         useOreBox = false
         playerOreBox = nil
     elseif useOreBox and not OreBox.validate(playerOreBox, oreConfig) then
@@ -473,6 +465,14 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
         Routes.checkLodestonesForDestination(bankLocation)
     end
 
+    if location.requiredVarbits then
+        for _, req in ipairs(location.requiredVarbits) do
+            if API.GetVarbitValue(req.varbit) ~= req.value then
+                return fail(req.message or ("Required varbit " .. req.varbit .. " not met for " .. location.name))
+            end
+        end
+    end
+
     if location.requiredLevels then
         for _, req in ipairs(location.requiredLevels) do
             local skillLevel = req.skill == "COMBAT" and Utils.getCombatLevel() or API.XPLevelTable(API.GetSkillXP(req.skill))
@@ -506,13 +506,364 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
     }
 end
 
+local cachedRocks = nil
+
+function Utils.scanRocks(oreConfig)
+    local targetRocks = API.ReadAllObjectsArray({0, 12}, {-1}, {oreConfig.name})
+    cachedRocks = {}
+    for _, rock in ipairs(targetRocks) do
+        cachedRocks[#cachedRocks + 1] = {
+            id = rock.Id,
+            x = rock.Tile_XYZ.x,
+            y = rock.Tile_XYZ.y,
+        }
+    end
+    API.printlua("Scanned " .. #cachedRocks .. " " .. oreConfig.name .. " rocks", 0, false)
+end
+
+function Utils.clearRockCache()
+    cachedRocks = nil
+end
+
+-- Juju potion functions
+
+local jujuRefreshThresholds = {}
+local jujuDrinkTime = {}
+local jujuDrinkDuration = {}
+local jujuLastBuffValue = {}
+
+function Utils.getBuffTimeRemaining(buffId)
+    local status = API.Buffbar_GetIDstatus(buffId, false)
+    if status and status.found then
+        return API.Bbar_ConvToSeconds(status)
+    end
+    return 0
+end
+
+function Utils.needsJujuRefresh(potionDef)
+    local remaining = Utils.getBuffTimeRemaining(potionDef.buffId)
+    if not jujuRefreshThresholds[potionDef.buffId] then
+        jujuRefreshThresholds[potionDef.buffId] = math.random(potionDef.refreshMin, potionDef.refreshMax)
+    end
+    return remaining <= jujuRefreshThresholds[potionDef.buffId]
+end
+
+function Utils.drinkJuju(potionDef)
+    local Banking = require("aio mining/mining_banking")
+    local potion = Banking.findJujuInInventory(potionDef)
+    if not potion then return false end
+
+    local prevTime = Utils.getBuffTimeRemaining(potionDef.buffId)
+    API.printlua("Drinking juju potion...", 0, false)
+    API.DoAction_Inventory1(potion.id, 0, 1, API.OFF_ACT_GeneralInterface_route)
+
+    if not waitForCondition(function()
+        local newTime = Utils.getBuffTimeRemaining(potionDef.buffId)
+        if newTime > prevTime then return true end
+        if not API.Container_Check_Items(93, {potion.id}) then return true end
+        return false
+    end, 5, 100) then
+        API.printlua("Failed to confirm potion was drunk", 4, false)
+        return false
+    end
+
+    local newDuration = Utils.getBuffTimeRemaining(potionDef.buffId)
+    jujuDrinkTime[potionDef.buffId] = API.ScriptRuntime()
+    jujuDrinkDuration[potionDef.buffId] = newDuration
+    jujuRefreshThresholds[potionDef.buffId] = nil
+    return true
+end
+
+function Utils.getJujuTimeUntilRefresh(potionDef)
+    if not potionDef then return 0 end
+
+    local buffId = potionDef.buffId
+    local buffValue = Utils.getBuffTimeRemaining(buffId)
+
+    -- Detect buff bar updates to sync real-time tracking
+    local lastValue = jujuLastBuffValue[buffId]
+    if buffValue > 0 and lastValue and lastValue ~= buffValue then
+        -- Buff bar just updated, sync our tracking to this moment
+        jujuDrinkTime[buffId] = API.ScriptRuntime()
+        jujuDrinkDuration[buffId] = buffValue
+    end
+    jujuLastBuffValue[buffId] = buffValue
+
+    local drinkTime = jujuDrinkTime[buffId]
+    local drinkDuration = jujuDrinkDuration[buffId]
+
+    if not drinkTime or not drinkDuration then
+        if buffValue <= 0 then return 0 end
+        return buffValue
+    end
+
+    local elapsed = API.ScriptRuntime() - drinkTime
+    local remaining = drinkDuration - elapsed
+
+    local threshold = jujuRefreshThresholds[buffId] or potionDef.refreshMin
+    return math.max(0, remaining - threshold)
+end
+
+function Utils.forceIdle()
+    if API.ReadPlayerAnim() == 0 and not API.ReadPlayerMovin2() then
+        return
+    end
+    local coord = API.PlayerCoord()
+    API.DoAction_WalkerW(WPOINT.new(coord.x, coord.y, 0))
+    waitForCondition(function()
+        return API.ReadPlayerAnim() == 0 and not API.ReadPlayerMovin2()
+    end, 5, 100)
+    API.RandomSleep2(300, 150, 100)
+end
+
+-- Summoning familiar functions
+
+local familiarRefreshThresholds = {}
+local familiarSummonTime = {}
+local familiarSummonDuration = {}
+local familiarLastBuffValue = {}
+
+function Utils.getSummoningPoints()
+    local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_POINTS)
+    if result and result[1] and result[1].textids then
+        local current, max = result[1].textids:match("^(%d+)/(%d+)$")
+        if current then
+            return tonumber(current), tonumber(max)
+        end
+    end
+    return 0, 0
+end
+
+function Utils.isFamiliarActive(familiarDef)
+    local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_FAMILIAR)
+    if result and result[1] and result[1].textids then
+        return result[1].textids:lower() == familiarDef.name:lower()
+    end
+    return false
+end
+
+function Utils.needsFamiliarRefresh(familiarDef)
+    if Utils.isFamiliarActive(familiarDef) then
+        local remaining = Utils.getBuffTimeRemaining(familiarDef.buffId)
+        if remaining <= 0 then
+            return false
+        end
+        if not familiarRefreshThresholds[familiarDef.buffId] then
+            familiarRefreshThresholds[familiarDef.buffId] = math.random(familiarDef.refreshMin, familiarDef.refreshMax)
+        end
+        return remaining <= familiarRefreshThresholds[familiarDef.buffId]
+    end
+    return true
+end
+
+function Utils.summonFamiliar(familiarDef)
+    if Utils.getSummoningPoints() < familiarDef.pointsCost then
+        API.printlua("Not enough summoning points", 4, false)
+        return false
+    end
+
+    if not API.Container_Check_Items(93, {familiarDef.pouchId}) then
+        API.printlua("No summoning pouch in inventory", 4, false)
+        return false
+    end
+
+    API.printlua("Summoning " .. familiarDef.name .. "...", 0, false)
+    API.DoAction_Inventory1(familiarDef.pouchId, 0, 1, API.OFF_ACT_GeneralInterface_route)
+
+    local expectedName = familiarDef.name:lower()
+    if not waitForCondition(function()
+        local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_FAMILIAR)
+        return result and result[1] and result[1].textids and result[1].textids:lower() == expectedName
+    end, 10, 100) then
+        API.printlua("Failed to confirm familiar was summoned", 4, false)
+        return false
+    end
+
+    API.RandomSleep2(600, 300, 300)
+
+    local newDuration = Utils.getBuffTimeRemaining(familiarDef.buffId)
+    familiarSummonTime[familiarDef.buffId] = API.ScriptRuntime()
+    familiarSummonDuration[familiarDef.buffId] = newDuration
+    familiarRefreshThresholds[familiarDef.buffId] = nil
+    return true
+end
+
+function Utils.getFamiliarTimeUntilRefresh(familiarDef)
+    if not familiarDef then return 0 end
+
+    local buffId = familiarDef.buffId
+    local buffValue = Utils.getBuffTimeRemaining(buffId)
+
+    local lastValue = familiarLastBuffValue[buffId]
+    if buffValue > 0 and lastValue and lastValue ~= buffValue then
+        familiarSummonTime[buffId] = API.ScriptRuntime()
+        familiarSummonDuration[buffId] = buffValue
+    end
+    familiarLastBuffValue[buffId] = buffValue
+
+    local summonTime = familiarSummonTime[buffId]
+    local summonDuration = familiarSummonDuration[buffId]
+
+    if not summonTime or not summonDuration then
+        if buffValue <= 0 then return 0 end
+        return buffValue
+    end
+
+    local elapsed = API.ScriptRuntime() - summonTime
+    local remaining = summonDuration - elapsed
+
+    local threshold = familiarRefreshThresholds[buffId] or familiarDef.refreshMin
+    return math.max(0, remaining - threshold)
+end
+
+function Utils.canRefreshSummoningPoints(refreshLocation)
+    if not refreshLocation then return false end
+    if refreshLocation.unlockChecks then
+        for _, check in ipairs(refreshLocation.unlockChecks) do
+            if API.GetVarbitValue(check.varbit) ~= check.value then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+function Utils.refreshSummoningPoints(miningLocation, selectedOre, familiarDef, oreBoxId, oreConfig, gemBagId, refreshLocation)
+    if not Utils.canRefreshSummoningPoints(refreshLocation) then
+        if refreshLocation and refreshLocation.unlockChecks then
+            for _, check in ipairs(refreshLocation.unlockChecks) do
+                if API.GetVarbitValue(check.varbit) ~= check.value then
+                    API.printlua(check.message, 4, false)
+                    break
+                end
+            end
+        else
+            API.printlua("No summoning refresh location configured", 4, false)
+        end
+        return false, false
+    end
+
+    local Routes = require("aio mining/mining_routes")
+    local Banking = require("aio mining/mining_banking")
+
+    -- Build destination from refresh location data
+    local route = Routes[refreshLocation.routeKey]
+    if not route then
+        API.printlua("No route found for " .. refreshLocation.name .. " (key: " .. tostring(refreshLocation.routeKey) .. ")", 4, false)
+        return false, false
+    end
+
+    local destination = {
+        name = refreshLocation.name,
+        route = route,
+        skip_if = refreshLocation.skip_if,
+        bank = refreshLocation.bank,
+    }
+
+    Utils.forceIdle()
+
+    if not Routes.travelTo(destination) then
+        API.printlua("Failed to travel to " .. refreshLocation.name, 4, false)
+        return false, false
+    end
+
+    -- Wait for refresh object to load
+    local obj = refreshLocation.refreshObject
+    if obj and obj.id then
+        if not waitForCondition(function()
+            local objects = API.GetAllObjArray1({obj.id}, 50, {obj.type or 0})
+            return #objects > 0
+        end, 10, 100) then
+            API.printlua(obj.name .. " not found after arriving", 4, false)
+            return false, false
+        end
+    end
+
+    API.RandomSleep2(600, 300, 300)
+
+    local currentPoints, maxPoints = Utils.getSummoningPoints()
+    API.printlua("Summoning points: " .. currentPoints .. "/" .. maxPoints, 0, false)
+    if maxPoints > 0 and currentPoints >= maxPoints then
+        API.printlua("Summoning points already full, skipping " .. obj.name, 0, false)
+    else
+        API.printlua("Using " .. obj.name .. "...", 0, false)
+        Interact:Object(obj.name, obj.action)
+
+        local prevPoints = currentPoints
+        if not waitForCondition(function()
+            local pts = Utils.getSummoningPoints()
+            return pts > prevPoints
+        end, 10, 100) then
+            API.printlua("Summoning points did not increase", 4, false)
+            return false, false
+        end
+
+        local restoredPoints = Utils.getSummoningPoints()
+        API.printlua("Summoning points restored: " .. restoredPoints, 0, false)
+    end
+    API.RandomSleep2(600, 300, 300)
+
+    if not Banking.openBank(destination) then
+        API.printlua("Failed to open bank at " .. refreshLocation.name, 4, false)
+        return false, false
+    end
+
+    if not Banking.depositAllItems(oreBoxId, oreConfig, gemBagId) then
+        API.printlua("Failed to deposit items", 4, false)
+        return false, false
+    end
+
+    local hasMorePouches = false
+    if familiarDef then
+        if Banking.withdrawSummoningPouch(familiarDef) then
+            hasMorePouches = API.Container_Check_Items(95, {familiarDef.pouchId})
+            local bankItem = API.Container_Get_s(95, familiarDef.pouchId)
+            local remaining = bankItem and bankItem.item_stack or 0
+            API.printlua(familiarDef.name .. " pouches remaining in bank: " .. remaining, 0, false)
+        else
+            API.printlua("No " .. familiarDef.name .. " pouches in bank", 4, false)
+        end
+    end
+
+    if API.BankOpen2() then
+        API.KeyboardPress2(0x1B, 60, 100)
+        Utils.waitOrTerminate(function()
+            return not API.Compare2874Status(24, true)
+        end, 5, 100, "Bank did not close")
+        API.RandomSleep2(600, 600, 300)
+    end
+
+    if familiarDef and Banking.findSummoningPouchInInventory(familiarDef) then
+        Utils.summonFamiliar(familiarDef)
+    end
+
+    if miningLocation then
+        if not Routes.travelTo(miningLocation, selectedOre) then
+            API.printlua("Failed to return to mining area after summoning refresh", 4, false)
+            return false, hasMorePouches
+        end
+    end
+
+    return true, hasMorePouches
+end
+
 -- Shared mining functions (used by both script and script_gui)
 
 function Utils.isMiningActive(state)
-    if state.miningLevel < 15 then
+    if state.noStamina or state.miningLevel < 15 then
         return API.ReadPlayerAnim() ~= 0
     end
     return API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS) > 0 and API.ReadPlayerAnim() ~= 0
+end
+
+local lastNonZeroAnimTime = 0
+
+function Utils.isRecentlyActive(state)
+    if API.ReadPlayerAnim() ~= 0 then
+        lastNonZeroAnimTime = os.time()
+        return true
+    end
+    return os.difftime(os.time(), lastNonZeroAnimTime) < 10
 end
 
 function Utils.canInteract(state)
@@ -538,19 +889,18 @@ function Utils.findRockertunity(oreConfig)
     local rockertunities = API.GetAllObjArray1(DATA.ROCKERTUNITY_IDS, 20, {4})
     if #rockertunities == 0 then return nil end
 
-    local targetRocks = API.ReadAllObjectsArray({0, 12}, {-1}, {oreConfig.name})
-    if #targetRocks == 0 then return nil end
+    if not cachedRocks or #cachedRocks == 0 then return nil end
 
     for _, rockertunity in ipairs(rockertunities) do
-        for _, rock in ipairs(targetRocks) do
-            local customDist = oreConfig.rockertunityDist and oreConfig.rockertunityDist[rock.Id]
-            local distance = Utils.getDistance(rock.Tile_XYZ.x, rock.Tile_XYZ.y, rockertunity.Tile_XYZ.x, rockertunity.Tile_XYZ.y)
+        for _, rock in ipairs(cachedRocks) do
+            local customDist = oreConfig.rockertunityDist and oreConfig.rockertunityDist[rock.id]
+            local distance = Utils.getDistance(rock.x, rock.y, rockertunity.Tile_XYZ.x, rockertunity.Tile_XYZ.y)
             local match = customDist and (distance <= customDist) or (distance < 1)
             if match then
                 return {
-                    id = rock.Id,
-                    x = rock.Tile_XYZ.x,
-                    y = rock.Tile_XYZ.y
+                    id = rock.id,
+                    x = rock.x,
+                    y = rock.y
                 }
             end
         end
@@ -599,6 +949,7 @@ function Utils.mineRock(oreConfig, state)
         return false
     end
     state.lastInteractTime = os.time()
+    lastNonZeroAnimTime = os.time()
     API.RandomSleep2(300, 150, 100)
     return true
 end
@@ -610,16 +961,31 @@ function Utils.threeTickInteract(oreConfig, state)
     API.RandomSleep2(50, 25, 25)
 end
 
+function Utils.hasOresInInventory(ore)
+    for _, oreId in ipairs(ore.oreIds) do
+        if Inventory:Contains(oreId) then
+            return true
+        end
+    end
+    return false
+end
+
 function Utils.needsBanking(cfg, ore, state)
+    if ore.isStackable then return false end
     if cfg.dropOres then return false end
     if ore.isGemRock and (cfg.dropGems or cfg.cutAndDrop) then return false end
     local invFull = Inventory:IsFull()
     if cfg.useGemBag and state.gemBagId and ore.isGemRock then
         return invFull and Utils.isGemBagFull(state.gemBagId)
     end
-    local OreBox = require("aio mining/mining_orebox")
-    local boxFull = OreBox.isFull(state.playerOreBox, ore)
-    return invFull and (not cfg.useOreBox or boxFull)
+    if cfg.useOreBox and state.playerOreBox then
+        local OreBox = require("aio mining/mining_orebox")
+        if invFull and (OreBox.isFull(state.playerOreBox, ore) or not Utils.hasOresInInventory(ore)) then
+            return true
+        end
+        return false
+    end
+    return invFull
 end
 
 function Utils.waitForMiningToStop(state)

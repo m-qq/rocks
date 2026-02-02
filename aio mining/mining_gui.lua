@@ -3,6 +3,7 @@ local ORES = require("aio mining/mining_ores")
 local LOCATIONS = require("aio mining/mining_locations")
 local Banking = require("aio mining/mining_banking")
 local Utils = require("aio mining/mining_utils")
+local DATA = require("aio mining/mining_data")
 
 local MiningGUI = {}
 MiningGUI.open = true
@@ -122,6 +123,9 @@ local function saveConfigToFile(cfg)
         CutAndDrop = cfg.cutAndDrop,
         UseGemBag = cfg.useGemBag,
         ThreeTickMining = cfg.threeTickMining,
+        UseJuju = cfg.useJuju,
+        UseSummoning = cfg.useSummoning,
+        SummoningRefreshLocation = cfg.summoningRefreshLocation,
         BankPin = cfg.bankPin,
     }
     local ok, json = pcall(API.JsonEncode, data)
@@ -130,7 +134,12 @@ local function saveConfigToFile(cfg)
         return
     end
     if not configPath then return end
-    os.execute('mkdir "' .. CONFIG_DIR:gsub("/", "\\") .. '" 2>nul')
+    local dir = io.open(CONFIG_DIR .. ".", "r")
+    if dir then
+        dir:close()
+    else
+        os.execute('mkdir "' .. CONFIG_DIR:gsub("/", "\\") .. '" 2>nul')
+    end
     local file = io.open(configPath, "w")
     if not file then
         API.printlua("Failed to open config file for writing", 4, false)
@@ -167,6 +176,9 @@ MiningGUI.config = {
     cutAndDrop = false,
     useGemBag = false,
     threeTickMining = false,
+    useJuju = "none",
+    useSummoning = "none",
+    summoningRefreshLocation = "wars_retreat",
     bankPin = "",
 }
 
@@ -199,6 +211,9 @@ function MiningGUI.loadConfig()
     if type(saved.CutAndDrop) == "boolean" then c.cutAndDrop = saved.CutAndDrop end
     if type(saved.UseGemBag) == "boolean" then c.useGemBag = saved.UseGemBag end
     if type(saved.ThreeTickMining) == "boolean" then c.threeTickMining = saved.ThreeTickMining end
+    if type(saved.UseJuju) == "string" then c.useJuju = saved.UseJuju end
+    if type(saved.UseSummoning) == "string" then c.useSummoning = saved.UseSummoning end
+    if type(saved.SummoningRefreshLocation) == "string" then c.summoningRefreshLocation = saved.SummoningRefreshLocation end
     if type(saved.BankPin) == "string" then c.bankPin = saved.BankPin end
 
     -- Validate location has the selected ore, reset if not
@@ -228,6 +243,9 @@ function MiningGUI.getConfig()
         cutAndDrop = c.cutAndDrop,
         useGemBag = c.useGemBag,
         threeTickMining = c.threeTickMining,
+        useJuju = c.useJuju,
+        useSummoning = c.useSummoning,
+        summoningRefreshLocation = c.summoningRefreshLocation,
         staminaRefreshPercent = c.staminaPercent,
         bankPin = c.bankPin,
     }
@@ -253,6 +271,21 @@ local ORE_COLORS = {
     ["Gold"]            = {0.90, 0.75, 0.15},
     ["Silver"]          = {0.75, 0.75, 0.80},
     ["Platinum"]        = {0.80, 0.80, 0.85},
+    ["Novite"]          = {0.45, 0.12, 0.50},
+    ["Bathus"]          = {0.25, 0.18, 0.12},
+    ["Marmaros"]        = {0.50, 0.45, 0.38},
+    ["Kratonium"]       = {0.35, 0.30, 0.15},
+    ["Fractite"]        = {0.12, 0.18, 0.12},
+    ["Zephyrium"]       = {0.15, 0.55, 0.40},
+    ["Argonite"]        = {0.30, 0.15, 0.55},
+    ["Katagon"]         = {0.12, 0.15, 0.45},
+    ["Gorgonite"]       = {0.55, 0.10, 0.12},
+    ["Promethium"]      = {0.50, 0.08, 0.10},
+    ["Uncommon gem"]    = {0.2, 0.6, 0.8},
+    ["Precious gem"]    = {0.75, 0.9, 1.0},
+    ["Crystal-flecked sandstone"] = {0.6, 0.3, 0.7},
+    ["Soft clay"]        = {0.65, 0.50, 0.30},
+    ["Seren stone"]     = {0.4, 0.85, 0.95},
 }
 
 local GEM_COLORS = {
@@ -296,9 +329,15 @@ local function progressBar(progress, height, text, r, g, b)
     ImGui.PopStyleColor(2)
 end
 
-local function disabledCheckbox(label)
+local function label(text)
+    ImGui.PushStyleColor(ImGuiCol.Text, 0.6, 0.75, 0.9, 1.0)
+    ImGui.TextWrapped(text)
+    ImGui.PopStyleColor(1)
+end
+
+local function disabledCheckbox(text)
     ImGui.PushStyleColor(ImGuiCol.Text, 0.35, 0.35, 0.35, 1.0)
-    ImGui.Selectable("     " .. label .. "##disabled_" .. label, false, ImGuiSelectableFlags.Disabled)
+    ImGui.Selectable("     " .. text .. "##disabled_" .. text, false, ImGuiSelectableFlags.Disabled)
     ImGui.PopStyleColor(1)
 end
 
@@ -310,11 +349,14 @@ local function drawConfigSummary(cfg)
         row("Location", locationNames[cfg.locationIndex + 1])
         local selectedOreKey = oreKeys[cfg.oreIndex + 1]
         local isGemRock = ORES[selectedOreKey] and ORES[selectedOreKey].isGemRock
-        local showBank = not (isGemRock and (cfg.dropGems or cfg.cutAndDrop)) and not (not isGemRock and cfg.dropOres)
+        local isStackable = ORES[selectedOreKey] and ORES[selectedOreKey].isStackable
+        local showBank = not isStackable and not (isGemRock and (cfg.dropGems or cfg.cutAndDrop)) and not (not isGemRock and cfg.dropOres)
         if showBank then
             row("Bank", bankNames[cfg.bankIndex + 1])
         end
-        if isGemRock then
+        if isStackable then
+            row("Mode", "Stackable Ore")
+        elseif isGemRock then
             if cfg.useGemBag then row("Mode", "Use Gem Bag")
             elseif cfg.cutAndDrop then row("Mode", "Cut and Drop")
             elseif cfg.dropGems then row("Mode", "Drop Gems")
@@ -326,6 +368,17 @@ local function drawConfigSummary(cfg)
         end
         if cfg.threeTickMining then
             row("3-tick", "Enabled", 0.5, 0.5, 0.55, 0.3, 1.0, 0.4)
+        end
+        if cfg.useJuju == "juju" then
+            row("Potion", "Juju Mining Potion", 0.5, 0.5, 0.55, 0.6, 0.9, 0.3)
+        elseif cfg.useJuju == "perfect" then
+            row("Potion", "Perfect Juju Mining Potion", 0.5, 0.5, 0.55, 0.3, 0.9, 0.6)
+        end
+        if cfg.useSummoning ~= "none" then
+            local familiarDef = DATA.SUMMONING_FAMILIARS[cfg.useSummoning]
+            if familiarDef then
+                row("Familiar", familiarDef.name, 0.5, 0.5, 0.55, 0.9, 0.5, 0.3)
+            end
         end
         ImGui.EndTable()
     end
@@ -347,10 +400,8 @@ local function drawConfigTab(cfg, gui)
 
     ImGui.PushItemWidth(-1)
 
-    -- Ore selector
-    ImGui.PushStyleColor(ImGuiCol.Text, 0.9, 0.7, 0.3, 1.0)
-    ImGui.TextWrapped("Ore")
-    ImGui.PopStyleColor(1)
+    -- Ore / Location / Bank dropdowns
+    label("Ore")
     local oreChanged, newOreIdx = ImGui.Combo("##ore", cfg.oreIndex, oreNames, 10)
     if oreChanged then
         cfg.oreIndex = newOreIdx
@@ -364,9 +415,6 @@ local function drawConfigTab(cfg, gui)
         end
     end
 
-    ImGui.Spacing()
-
-    -- Location selector (filtered by ore)
     local selectedOreKey = oreKeys[cfg.oreIndex + 1]
     local filteredLocIndices = getFilteredLocationIndices(selectedOreKey)
     local filteredLocNames = {}
@@ -375,7 +423,6 @@ local function drawConfigTab(cfg, gui)
         filteredLocNames[i] = locationNames[globalIdx]
         filteredLocMapping[i] = globalIdx
     end
-
     local currentFilteredIdx = 0
     for i, globalIdx in ipairs(filteredLocIndices) do
         if (globalIdx - 1) == cfg.locationIndex then
@@ -383,11 +430,8 @@ local function drawConfigTab(cfg, gui)
             break
         end
     end
-
-    ImGui.PushStyleColor(ImGuiCol.Text, 0.9, 0.7, 0.3, 1.0)
-    ImGui.TextWrapped("Location")
-    ImGui.PopStyleColor(1)
     if #filteredLocNames > 0 then
+        label("Location")
         local locChanged, newLocFilteredIdx = ImGui.Combo("##location", currentFilteredIdx, filteredLocNames, 10)
         if locChanged then
             local globalIdx = filteredLocMapping[newLocFilteredIdx + 1]
@@ -397,34 +441,25 @@ local function drawConfigTab(cfg, gui)
         ImGui.TextColored(1.0, 0.3, 0.3, 1.0, "No locations for this ore")
     end
 
-    ImGui.Spacing()
-
-    -- Banking location (hidden when dropping/cutting)
     local isGemRock = ORES[selectedOreKey] and ORES[selectedOreKey].isGemRock
+    local isStackable = ORES[selectedOreKey] and ORES[selectedOreKey].isStackable
     local effectiveDropGems = isGemRock and cfg.dropGems
     local effectiveCutAndDrop = isGemRock and cfg.cutAndDrop
-    local effectiveDropOres = not isGemRock and cfg.dropOres
-    local needsBanking = not effectiveDropOres and not effectiveDropGems and not effectiveCutAndDrop
+    local effectiveDropOres = not isGemRock and not isStackable and cfg.dropOres
+    local needsBanking = not isStackable and not effectiveDropOres and not effectiveDropGems and not effectiveCutAndDrop
 
     if needsBanking then
-        ImGui.PushStyleColor(ImGuiCol.Text, 0.9, 0.7, 0.3, 1.0)
-        ImGui.TextWrapped("Banking Location")
-        ImGui.PopStyleColor(1)
+        label("Bank")
         local bankChanged, newBankIdx = ImGui.Combo("##bank", cfg.bankIndex, bankNames, 10)
         if bankChanged then cfg.bankIndex = newBankIdx end
-        ImGui.Spacing()
     end
 
     ImGui.Separator()
-    ImGui.Spacing()
 
-    -- Ore-type-specific options
-    if isGemRock then
-        ImGui.PushStyleColor(ImGuiCol.Text, 0.7, 0.5, 0.9, 1.0)
-        ImGui.TextWrapped("Gem Options")
-        ImGui.PopStyleColor(1)
-
-        -- Use Gem Bag
+    -- Ore/Gem options
+    if isStackable then
+        -- No options needed for stackable ores
+    elseif isGemRock then
         if cfg.dropGems or cfg.cutAndDrop then
             disabledCheckbox("Use Gem Bag")
         else
@@ -434,8 +469,6 @@ local function drawConfigTab(cfg, gui)
                 if val then cfg.dropGems = false; cfg.cutAndDrop = false end
             end
         end
-
-        -- Cut and Drop
         if cfg.dropGems or cfg.useGemBag then
             disabledCheckbox("Cut and Drop")
         else
@@ -445,8 +478,6 @@ local function drawConfigTab(cfg, gui)
                 if val then cfg.dropGems = false; cfg.useGemBag = false end
             end
         end
-
-        -- Drop Gems
         if cfg.cutAndDrop or cfg.useGemBag then
             disabledCheckbox("Drop Gems")
         else
@@ -457,11 +488,9 @@ local function drawConfigTab(cfg, gui)
             end
         end
     else
-        ImGui.PushStyleColor(ImGuiCol.Text, 0.6, 0.8, 1.0, 1.0)
-        ImGui.TextWrapped("Ore Options")
-        ImGui.PopStyleColor(1)
+        local oreNoOreBox = ORES[selectedOreKey] and ORES[selectedOreKey].noOreBox
+        local oreNoRockertunities = ORES[selectedOreKey] and ORES[selectedOreKey].noRockertunities
 
-        -- Drop Ores
         if cfg.useOreBox then
             disabledCheckbox("Drop Ores")
         else
@@ -471,43 +500,114 @@ local function drawConfigTab(cfg, gui)
                 if val then cfg.useOreBox = false end
             end
         end
-
-        -- Use Ore Box
-        if cfg.dropOres then
-            disabledCheckbox("Use Ore Box")
-        else
-            local changed, val = ImGui.Checkbox("Use Ore Box##useOreBox", cfg.useOreBox)
-            if changed then
-                cfg.useOreBox = val
-                if val then cfg.dropOres = false end
+        if not oreNoOreBox then
+            if cfg.dropOres then
+                disabledCheckbox("Use Ore Box")
+            else
+                local changed, val = ImGui.Checkbox("Use Ore Box##useOreBox", cfg.useOreBox)
+                if changed then
+                    cfg.useOreBox = val
+                    if val then cfg.dropOres = false end
+                end
             end
         end
-
-        -- Chase Rockertunities
-        local changed, val = ImGui.Checkbox("Chase Rockertunities##chaseRock", cfg.chaseRockertunities)
-        if changed then cfg.chaseRockertunities = val end
+        if not oreNoRockertunities then
+            local changed, val = ImGui.Checkbox("Chase Rockertunities##chaseRock", cfg.chaseRockertunities)
+            if changed then cfg.chaseRockertunities = val end
+        end
     end
 
-    ImGui.Spacing()
+    if not isStackable then
+        local ttChanged, ttVal = ImGui.Checkbox("3-tick Mining##3tick", cfg.threeTickMining)
+        if ttChanged then cfg.threeTickMining = ttVal end
+    end
+
     ImGui.Separator()
-    ImGui.Spacing()
 
-    -- General options
-    ImGui.PushStyleColor(ImGuiCol.Text, 0.6, 0.8, 1.0, 1.0)
-    ImGui.TextWrapped("General")
-    ImGui.PopStyleColor(1)
+    -- Potion
+    local selectedBankKey = bankKeys[cfg.bankIndex + 1]
+    local isMetalBank = selectedBankKey and Banking.LOCATIONS[selectedBankKey] and Banking.LOCATIONS[selectedBankKey].metalBank
 
-    local ttChanged, ttVal = ImGui.Checkbox("3-tick Mining##3tick", cfg.threeTickMining)
-    if ttChanged then cfg.threeTickMining = ttVal end
+    if not isGemRock and not isMetalBank then
+        local potionKeys = {"none", "juju", "perfect"}
+        local potionNames = {"None", "Juju Mining Potion", "Perfect Juju Mining Potion"}
+        local currentPotionIdx = 0
+        for i, key in ipairs(potionKeys) do
+            if key == cfg.useJuju then
+                currentPotionIdx = i - 1
+                break
+            end
+        end
+        label("Potion")
+        local potionChanged, newPotionIdx = ImGui.Combo("##potion", currentPotionIdx, potionNames, 10)
+        if potionChanged then
+            cfg.useJuju = potionKeys[newPotionIdx + 1]
+        end
+    else
+        cfg.useJuju = "none"
+    end
 
-    ImGui.Spacing()
-    ImGui.TextWrapped("Refresh Stamina At")
-    local stamChanged, newStamVal = ImGui.SliderInt("##stamina", cfg.staminaPercent, 50, 100, "%d%%")
-    if stamChanged then cfg.staminaPercent = newStamVal end
+    -- Summoning
+    local summoningLevel = API.XPLevelTable(API.GetSkillXP("SUMMONING"))
+    local familiarKeys = {"none"}
+    local familiarNames = {"None"}
+    for key, def in pairs(DATA.SUMMONING_FAMILIARS) do
+        if not def.levelReq or summoningLevel >= def.levelReq then
+            familiarKeys[#familiarKeys + 1] = key
+            familiarNames[#familiarNames + 1] = def.name
+        end
+    end
+
+    if #familiarKeys > 1 then
+        local currentFamiliarIdx = 0
+        for i, key in ipairs(familiarKeys) do
+            if key == cfg.useSummoning then
+                currentFamiliarIdx = i - 1
+                break
+            end
+        end
+        label("Familiar")
+        local fChanged, newFIdx = ImGui.Combo("##familiarSelect", currentFamiliarIdx, familiarNames, 10)
+        if fChanged then
+            cfg.useSummoning = familiarKeys[newFIdx + 1]
+        end
+
+        if cfg.useSummoning ~= "none" then
+            local refreshKeys = {}
+            local refreshNames = {}
+            for key, loc in pairs(DATA.SUMMONING_REFRESH_LOCATIONS) do
+                refreshKeys[#refreshKeys + 1] = key
+                refreshNames[#refreshNames + 1] = loc.name
+            end
+            local currentRefreshIdx = 0
+            for i, key in ipairs(refreshKeys) do
+                if key == cfg.summoningRefreshLocation then
+                    currentRefreshIdx = i - 1
+                    break
+                end
+            end
+            label("Refresh Location")
+            local rlChanged, newRlIdx = ImGui.Combo("##summoningRefresh", currentRefreshIdx, refreshNames, 10)
+            if rlChanged then
+                cfg.summoningRefreshLocation = refreshKeys[newRlIdx + 1]
+            end
+        end
+    else
+        cfg.useSummoning = "none"
+        cfg.summoningRefreshLocation = nil
+    end
+
+    ImGui.Separator()
+
+    local noStamina = ORES[selectedOreKey] and ORES[selectedOreKey].noStamina
+    if not noStamina then
+        label("Refresh Stamina At")
+        local stamChanged, newStamVal = ImGui.SliderInt("##stamina", cfg.staminaPercent, 50, 100, "%d%%")
+        if stamChanged then cfg.staminaPercent = newStamVal end
+    end
 
     if needsBanking then
-        ImGui.Spacing()
-        ImGui.TextWrapped("Bank PIN")
+        label("Bank PIN")
         local pinChanged, newPin = ImGui.InputText("##bankpin", cfg.bankPin, 0)
         if pinChanged then cfg.bankPin = newPin end
     end
@@ -529,6 +629,26 @@ local function drawConfigTab(cfg, gui)
     ImGui.PopStyleColor(3)
 end
 
+local function formatNumber(n)
+    if n >= 1000000 then
+        return string.format("%.1fM", n / 1000000)
+    elseif n >= 1000 then
+        return string.format("%.1fK", n / 1000)
+    end
+    return string.format("%d", n)
+end
+
+local function formatDuration(seconds)
+    if seconds <= 0 then return "--" end
+    local hours = math.floor(seconds / 3600)
+    local mins = math.floor((seconds % 3600) / 60)
+    local secs = math.floor(seconds % 60)
+    if hours > 0 then
+        return string.format("%dh %02dm", hours, mins)
+    end
+    return string.format("%dm %02ds", mins, secs)
+end
+
 local function drawInfoTab(data)
     local stateText = data.state or "Idle"
     local sc = STATE_COLORS[stateText] or {0.5, 0.5, 0.5}
@@ -544,23 +664,43 @@ local function drawInfoTab(data)
     ImGui.Spacing()
 
     -- Stamina (varbit tracks drain, so remaining = max - drain)
-    local drain = data.currentStamina or 0
-    local max = data.maxStamina or 1
-    local remaining = math.max(0, math.min(max, max - drain))
-    local pct = remaining / max
+    if not data.noStamina then
+        local drain = data.currentStamina or 0
+        local max = data.maxStamina or 1
+        local remaining = math.max(0, math.min(max, max - drain))
+        local pct = remaining / max
 
-    local sr, sg, sb = 1.0, 0.3, 0.3
-    if pct > 0.6 then
-        sr, sg, sb = 0.3, 0.85, 0.45
-    elseif pct > 0.3 then
-        sr, sg, sb = 1.0, 0.75, 0.2
+        local sr, sg, sb = 1.0, 0.3, 0.3
+        if pct > 0.6 then
+            sr, sg, sb = 0.3, 0.85, 0.45
+        elseif pct > 0.3 then
+            sr, sg, sb = 1.0, 0.75, 0.2
+        end
+
+        progressBar(pct, 20, string.format("Stamina: %d / %d", remaining, max), sr, sg, sb)
+
+        ImGui.Spacing()
+        ImGui.Separator()
+        ImGui.Spacing()
     end
 
-    progressBar(pct, 20, string.format("Stamina: %d / %d", remaining, max), sr, sg, sb)
+    -- Daily Limit
+    if data.dailyLimit then
+        local cur = data.dailyLimit.current or 0
+        local max = data.dailyLimit.max or 1
+        local pct = cur / max
+        local dr, dg, db = 0.3, 0.85, 0.45
+        if pct >= 1.0 then
+            dr, dg, db = 1.0, 0.3, 0.3
+        elseif pct > 0.8 then
+            dr, dg, db = 1.0, 0.75, 0.2
+        end
+        progressBar(pct, 20, string.format("Daily: %d / %d", cur, max), dr, dg, db)
 
-    ImGui.Spacing()
-    ImGui.Separator()
-    ImGui.Spacing()
+        ImGui.Spacing()
+        ImGui.Separator()
+        ImGui.Spacing()
+    end
 
     -- Ore Box
     if data.oreBox then
@@ -631,29 +771,16 @@ local function drawInfoTab(data)
             row("Mode", data.mode)
         end
         row("Anti-idle", Utils.formatTime(data.antiIdleTime or 0), 0.5, 0.5, 0.55, 0.9, 0.9, 0.9)
+        if data.juju then
+            row("Potion", Utils.formatTime(data.juju.timeUntilRefresh or 0), 0.5, 0.5, 0.55, 0.9, 0.9, 0.9)
+        end
+        if data.familiar then
+            row("Familiar", Utils.formatTime(data.familiar.timeUntilRefresh or 0), 0.5, 0.5, 0.55, 0.9, 0.9, 0.9)
+            row("Summ. Points", tostring(data.familiar.summoningPoints or 0), 0.5, 0.5, 0.55, 0.9, 0.9, 0.9)
+        end
 
         ImGui.EndTable()
     end
-end
-
-local function formatNumber(n)
-    if n >= 1000000 then
-        return string.format("%.1fM", n / 1000000)
-    elseif n >= 1000 then
-        return string.format("%.1fK", n / 1000)
-    end
-    return string.format("%d", n)
-end
-
-local function formatDuration(seconds)
-    if seconds <= 0 then return "--" end
-    local hours = math.floor(seconds / 3600)
-    local mins = math.floor((seconds % 3600) / 60)
-    local secs = math.floor(seconds % 60)
-    if hours > 0 then
-        return string.format("%dh %02dm", hours, mins)
-    end
-    return string.format("%dm %02ds", mins, secs)
 end
 
 local function drawMetricsTab(data)

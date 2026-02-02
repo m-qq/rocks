@@ -19,8 +19,10 @@ DATA.VARBIT_IDS = {
     COMBAT_LEVEL = 9611,
     POF_BANK_UNLOCKED = 41690,
     WARS_RETREAT_UNLOCKED = 45680,
+    ALTAR_OF_WAR_UNLOCKED = 45682,
     GOTE_PORTAL_1 = 25054,
     GOTE_PORTAL_2 = 25055,
+    SUMMONING_POINTS = 31524,
 
     ORESOME = {
         COPPER = 43189,
@@ -92,7 +94,9 @@ DATA.INTERFACES = {
     DUNGEONEERING_CAPE_KARAMJA = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,7,-1,0 }, { 720,27,-1,0 } },
     DUNGEONEERING_CAPE_MINING_GUILD = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,10,-1,0 }, { 720,36,-1,0 } },
     DUNGEONEERING_CAPE_KALGERION = { { 720,2,-1,0 }, { 720,16,-1,0 }, { 720,12,-1,0 }, { 720,42,-1,0 } },
-    GEM_CUTTING = { { 1371,7,-1,0 }, { 1371,0,-1,0 }, { 1371,15,-1,0 }, { 1371,25,-1,0 }, { 1371,10,-1,0 }, { 1371,11,-1,0 }, { 1371,27,-1,0 }, { 1371,27,3,0 } }
+    GEM_CUTTING = { { 1371,7,-1,0 }, { 1371,0,-1,0 }, { 1371,15,-1,0 }, { 1371,25,-1,0 }, { 1371,10,-1,0 }, { 1371,11,-1,0 }, { 1371,27,-1,0 }, { 1371,27,3,0 } },
+    SUMMONING_POINTS = { { 1430,0,-1,0 }, { 1430,4,-1,0 }, { 1430,18,-1,0 }, { 1430,20,-1,0 }, { 1430,20,8,0 } },
+    SUMMONING_FAMILIAR = { { 662,0,-1,0 }, { 662,43,-1,0 }, { 662,50,-1,0 }, { 662,58,-1,0 } }
 }
 
 DATA.VARBIT_IDS.INVENTORY_STATE = 21816
@@ -132,5 +136,90 @@ DATA.MEMORY_STRAND_SLOTS = {
     { varbit = 37039, interfaceSlot = 16 },  -- Slot 7
     { varbit = 37040, interfaceSlot = 17 }   -- Slot 8
 }
+
+DATA.JUJU_POTIONS = {
+    juju = {
+        buffId = 20004,
+        refreshMin = 1,
+        refreshMax = 13,
+        potions = {
+            {id = 23131, dose = 6}, -- flask 6
+            {id = 23132, dose = 5}, -- flask 5
+            {id = 23133, dose = 4}, -- flask 4
+            {id = 20003, dose = 4}, -- potion 4
+            {id = 23134, dose = 3}, -- flask 3
+            {id = 20004, dose = 3}, -- potion 3
+            {id = 23135, dose = 2}, -- flask 2
+            {id = 20005, dose = 2}, -- potion 2
+            {id = 23136, dose = 1}, -- flask 1
+            {id = 20006, dose = 1}, -- potion 1
+        },
+    },
+    perfect = {
+        buffId = 32773,
+        refreshMin = 3,
+        refreshMax = 120,
+        potions = {
+            {id = 32883, dose = 6}, -- flask 6
+            {id = 32881, dose = 5}, -- flask 5
+            {id = 32879, dose = 4}, -- flask 4
+            {id = 32775, dose = 4}, -- potion 4
+            {id = 32877, dose = 3}, -- flask 3
+            {id = 32773, dose = 3}, -- potion 3
+            {id = 32875, dose = 2}, -- flask 2
+            {id = 32771, dose = 2}, -- potion 2
+            {id = 32873, dose = 1}, -- flask 1
+            {id = 32769, dose = 1}, -- potion 1
+        },
+    },
+}
+
+-- Build a set of all juju potion IDs for keep-items
+DATA.ALL_JUJU_IDS = {}
+for _, def in pairs(DATA.JUJU_POTIONS) do
+    for _, potion in ipairs(def.potions) do
+        DATA.ALL_JUJU_IDS[potion.id] = true
+    end
+end
+
+DATA.SUMMONING_FAMILIARS = {
+    lava_titan = {
+        name = "Lava Titan",
+        pouchId = 12788,
+        buffId = 26095,
+        pointsCost = 90,
+        refreshMin = 3,
+        refreshMax = 120,
+        levelReq = 83,
+    },
+}
+
+DATA.SUMMONING_REFRESH_LOCATIONS = {
+    wars_retreat = {
+        name = "War's Retreat",
+        routeKey = "TO_WARS_RETREAT_BANK",
+        skip_if = { nearCoord = {x = 3294, y = 10127} },
+        bank = {
+            object = "Bank chest",
+            action = "Use",
+        },
+        refreshObject = {
+            name = "Altar of War",
+            id = 114748,
+            type = 0,
+            action = "Pray",
+        },
+        unlockChecks = {
+            { varbit = 45680, value = 1, message = "War's Retreat not unlocked" },
+            { varbit = 45682, value = 1, message = "Altar of War not unlocked" },
+        },
+    },
+}
+
+-- Build a set of all summoning pouch IDs for keep-items
+DATA.ALL_SUMMONING_POUCH_IDS = {}
+for _, def in pairs(DATA.SUMMONING_FAMILIARS) do
+    DATA.ALL_SUMMONING_POUCH_IDS[def.pouchId] = true
+end
 
 return DATA

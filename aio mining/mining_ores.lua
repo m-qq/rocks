@@ -59,6 +59,15 @@ local ORES = {
         tier = 20,
         isGemRock = true
     },
+    precious_gem_rock = {
+        name = "Precious gem rock",
+        action = "Mine",
+        oreIds = {1621, 1619, 1617},
+        oreNames = {[1621] = "Uncut emerald", [1619] = "Uncut ruby", [1617] = "Uncut diamond"},
+        cutIds = {1605, 1603, 1601},
+        tier = 25,
+        isGemRock = true
+    },
 
     -- Tier 30
     mithril = {
@@ -289,6 +298,38 @@ local ORES = {
         vbInBox = 58113,
         oresomeKey = nil,
         capacityBoostLevel = nil
+    },
+    crystal_sandstone = {
+        name = "Crystal-flecked sandstone",
+        action = "Mine",
+        oreIds = {32847},
+        oreNames = {[32847] = "Crystal-flecked sandstone"},
+        tier = 81,
+        noOreBox = true,
+        noRockertunities = true,
+        noStamina = true,
+    },
+    soft_clay = {
+        name = "Soft clay rock",
+        action = "Mine",
+        oreIds = {1761},
+        oreNames = {[1761] = "Soft clay"},
+        tier = 75,
+        noOreBox = true,
+        noRockertunities = true,
+    },
+
+    -- Special
+    seren_stones = {
+        name = "Seren stone",
+        action = "Mine",
+        oreIds = {32262},
+        oreNames = {[32262] = "Corrupted ore"},
+        tier = 89,
+        isStackable = true,
+        noStamina = true,
+        noOreBox = true,
+        noRockertunities = true,
     },
 }
 

@@ -52,12 +52,21 @@ if cfg.cutAndDrop then
 end
 
 local selectedOreConfig = ORES[cfg.ore]
-if selectedOreConfig and not selectedOreConfig.isGemRock then
+if selectedOreConfig and selectedOreConfig.isStackable then
+    cfg.useOreBox = false
     cfg.useGemBag = false
     cfg.cutAndDrop = false
     cfg.dropGems = false
-end
-if selectedOreConfig and selectedOreConfig.isGemRock then
+    cfg.dropOres = false
+    cfg.chaseRockertunities = false
+    cfg.threeTickMining = false
+elseif selectedOreConfig and not selectedOreConfig.isGemRock then
+    cfg.useGemBag = false
+    cfg.cutAndDrop = false
+    cfg.dropGems = false
+    if selectedOreConfig.noOreBox then cfg.useOreBox = false end
+    if selectedOreConfig.noRockertunities then cfg.chaseRockertunities = false end
+elseif selectedOreConfig and selectedOreConfig.isGemRock then
     cfg.useOreBox = false
     cfg.chaseRockertunities = false
     cfg.dropOres = false
@@ -66,12 +75,21 @@ if cfg.dropOres then
     cfg.useOreBox = false
 end
 
+local jujuDef = cfg.useJuju ~= "none" and DATA.JUJU_POTIONS[cfg.useJuju] or nil
+local familiarDef = cfg.useSummoning ~= "none" and DATA.SUMMONING_FAMILIARS[cfg.useSummoning] or nil
+local summoningRefreshLocation = cfg.summoningRefreshLocation and DATA.SUMMONING_REFRESH_LOCATIONS[cfg.summoningRefreshLocation] or nil
+
 local state = {
     playerOreBox = nil,
     gemBagId = nil,
+    jujuDef = jujuDef,
+    familiarDef = familiarDef,
+    summoningRefreshLocation = summoningRefreshLocation,
     lastInteractTime = 0,
     lastInteractTick = 0,
     nextTickTarget = 0,
+    hasInteracted = false,
+    noStamina = selectedOreConfig and selectedOreConfig.noStamina or false,
     miningLevel = API.XPLevelTable(API.GetSkillXP("MINING")),
     currentState = "Idle",
 }
@@ -100,7 +118,7 @@ if cfg.useGemBag then
     end
 end
 
-local skipBanking = cfg.dropOres or cfg.dropGems or cfg.cutAndDrop
+local skipBanking = cfg.dropOres or cfg.dropGems or cfg.cutAndDrop or (selectedOreConfig and selectedOreConfig.isStackable)
 local validated = Utils.validateMiningSetup(cfg.location, cfg.ore, cfg.bankLocation, state.playerOreBox, cfg.useOreBox, skipBanking)
 
 if not validated then
@@ -124,10 +142,19 @@ end
 local loc = validated.location
 local ore = validated.oreConfig
 local bank = validated.bankLocation
+
 cfg.useOreBox = validated.useOreBox
 state.playerOreBox = validated.playerOreBox
 
 local oreBoxCapacity = state.playerOreBox and OreBox.getCapacity(state.playerOreBox, ore) or 0
+
+if loc.dailyLimit then
+    local current = API.GetVarbitValue(loc.dailyLimit.varbit)
+    if current >= loc.dailyLimit.max then
+        MiningGUI.addWarning("Daily limit already reached (" .. current .. "/" .. loc.dailyLimit.max .. ")")
+        MiningGUI.selectWarningsTab = true
+    end
+end
 
 local startXP = API.GetSkillXP("MINING")
 local startLevel = API.XPLevelTable(startXP)
@@ -139,10 +166,11 @@ local function buildGUIData()
     local guiData = {
         currentStamina = Utils.getStaminaDrain(),
         maxStamina = Utils.calculateMaxStamina(),
+        noStamina = ore.noStamina,
         state = state.currentState,
         location = loc.name,
         oreName = oreName,
-        bankLocation = bank and bank.name or "None (dropping)",
+        bankLocation = bank and bank.name or "None (stackable)",
         antiIdleTime = idleHandler.getTimeUntilNextIdle()
     }
 
@@ -150,6 +178,13 @@ local function buildGUIData()
         guiData.mode = "Drop"
     elseif cfg.threeTickMining then
         guiData.mode = "3-Tick Mining"
+    end
+
+    if loc.dailyLimit then
+        guiData.dailyLimit = {
+            current = API.GetVarbitValue(loc.dailyLimit.varbit),
+            max = loc.dailyLimit.max
+        }
     end
 
     if state.playerOreBox then
@@ -219,6 +254,23 @@ local function buildGUIData()
         }
     end
 
+    if state.jujuDef then
+        local buffActive = Utils.getBuffTimeRemaining(state.jujuDef.buffId) > 0
+        local hasPotion = Banking.findJujuInInventory(state.jujuDef) ~= nil
+        if buffActive or hasPotion then
+            guiData.juju = {
+                timeUntilRefresh = Utils.getJujuTimeUntilRefresh(state.jujuDef),
+            }
+        end
+    end
+
+    if state.familiarDef then
+        guiData.familiar = {
+            timeUntilRefresh = Utils.getFamiliarTimeUntilRefresh(state.familiarDef),
+            summoningPoints = Utils.getSummoningPoints(),
+        }
+    end
+
     return guiData
 end
 
@@ -246,6 +298,39 @@ local success, err = pcall(function()
         API.DoRandomEvents()
         state.miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
 
+        if loc.dailyLimit then
+            local current = API.GetVarbitValue(loc.dailyLimit.varbit)
+            if current >= loc.dailyLimit.max then
+                API.printlua("Daily limit reached (" .. current .. "/" .. loc.dailyLimit.max .. ") - stopping", 0, false)
+                break
+            end
+        end
+
+        if state.familiarDef and Utils.needsFamiliarRefresh(state.familiarDef) then
+            if Utils.getSummoningPoints() >= state.familiarDef.pointsCost and API.Container_Check_Items(93, {state.familiarDef.pouchId}) then
+                if not Utils.summonFamiliar(state.familiarDef) and not state.familiarWarned then
+                    state.familiarWarned = true
+                    MiningGUI.addWarning("Failed to summon " .. state.familiarDef.name)
+                end
+            elseif state.summoningRefreshLocation then
+                state.currentState = "Refreshing Summoning"
+                local refreshOk, hasMorePouches = Utils.refreshSummoningPoints(loc, cfg.ore, state.familiarDef, state.playerOreBox, ore, state.gemBagId, state.summoningRefreshLocation)
+                if refreshOk then
+                    state.familiarWarned = false
+                    state.rocksScanned = false
+                    state.hasInteracted = false
+                    Utils.clearRockCache()
+                    if not hasMorePouches then
+                        state.familiarDef = nil
+                        MiningGUI.addWarning("No more familiar pouches in bank - disabling summoning")
+                    end
+                elseif not state.familiarWarned then
+                    state.familiarWarned = true
+                    MiningGUI.addWarning("Unable to refresh summoning points")
+                end
+            end
+        end
+
         if Inventory:IsFull() and cfg.cutAndDrop and ore.isGemRock then
             state.currentState = "Cutting Gems"
             Utils.cutAndDropGems(ore, state)
@@ -257,10 +342,38 @@ local success, err = pcall(function()
             Utils.dropAllOres(ore, state)
         elseif Utils.needsBanking(cfg, ore, state) then
             state.currentState = "Banking"
-            if not Banking.performBanking(bank, loc, state.playerOreBox, ore, cfg.bankPin, cfg.ore, cfg.location, state.gemBagId) then
+            state.rocksScanned = false
+            state.hasInteracted = false
+            Utils.clearRockCache()
+            Banking.jujuWarning = nil
+            Banking.familiarWarning = nil
+            if not Banking.performBanking(bank, loc, state.playerOreBox, ore, cfg.bankPin, cfg.ore, cfg.location, state.gemBagId, state.jujuDef, state.familiarDef) then
                 break
             end
+            if Banking.jujuWarning then
+                MiningGUI.addWarning(Banking.jujuWarning)
+            else
+                state.jujuWarned = false
+            end
+            if Banking.familiarWarning then
+                MiningGUI.addWarning(Banking.familiarWarning)
+                state.familiarDef = nil
+            else
+                state.familiarWarned = false
+            end
         elseif Utils.isNearOreLocation(loc, cfg.ore) then
+            if not state.rocksScanned then
+                Utils.scanRocks(ore)
+                state.rocksScanned = true
+            end
+
+            if state.jujuDef and Utils.needsJujuRefresh(state.jujuDef) then
+                if not Utils.drinkJuju(state.jujuDef) and not state.jujuWarned then
+                    state.jujuWarned = true
+                    MiningGUI.addWarning("No juju potion in inventory - will try next bank trip")
+                end
+            end
+
             local miningInProgress = API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS) > 0
             if miningInProgress or Utils.isMiningActive(state) then
                 state.currentState = "Mining"
@@ -279,6 +392,7 @@ local success, err = pcall(function()
                 state.currentState = "Mining"
                 if rockertunity and Utils.canInteract(state) then
                     if not Utils.mineRockertunity(ore, rockertunity, state) then break end
+                    state.hasInteracted = true
                     state.lastInteractTick = API.Get_tick()
                     state.nextTickTarget = math.random(100) <= 3 and 4 or math.random(2, 3)
                 elseif Utils.shouldThreeTick(cfg, state) then
@@ -287,16 +401,29 @@ local success, err = pcall(function()
             elseif rockertunity and Utils.canInteract(state) then
                 state.currentState = "Mining"
                 if not Utils.mineRockertunity(ore, rockertunity, state) then break end
+                state.hasInteracted = true
             elseif not invFull and Utils.canInteract(state) then
-                local staminaPercent = Utils.getStaminaPercent()
-                local miningInProgress = API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS) > 0
-                if state.miningLevel < 15 or not miningInProgress or staminaPercent >= cfg.staminaRefreshPercent then
-                    state.currentState = "Mining"
-                    if not Utils.mineRock(ore, state) then break end
+                if state.noStamina then
+                    if not state.hasInteracted or not Utils.isRecentlyActive(state) then
+                        state.currentState = "Mining"
+                        if not Utils.mineRock(ore, state) then break end
+                        state.hasInteracted = true
+                    end
+                else
+                    local staminaPercent = Utils.getStaminaPercent()
+                    local miningInProgress = API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS) > 0
+                    if not state.hasInteracted or state.miningLevel < 15 or not miningInProgress or staminaPercent >= cfg.staminaRefreshPercent then
+                        state.currentState = "Mining"
+                        if not Utils.mineRock(ore, state) then break end
+                        state.hasInteracted = true
+                    end
                 end
             end
         else
             state.currentState = "Traveling"
+            state.rocksScanned = false
+            state.hasInteracted = false
+            Utils.clearRockCache()
             if not Routes.travelTo(loc, cfg.ore) then break end
             if loc.oreWaypoints and loc.oreWaypoints[cfg.ore] then
                 if not Utils.walkThroughWaypoints(loc.oreWaypoints[cfg.ore]) then break end
