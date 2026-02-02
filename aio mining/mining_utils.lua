@@ -943,8 +943,14 @@ function Utils.isNearOreLocation(loc, selectedOre)
 end
 
 function Utils.mineRock(oreConfig, state)
-    API.printlua("Mining " .. oreConfig.name .. "...", 5, false)
-    Interact:Object(oreConfig.name, oreConfig.action, 25)
+    local reason = state.hasInteracted and "Stamina refresh" or "Initial interaction"
+    API.printlua("Mining " .. oreConfig.name .. " (" .. reason .. ")", 5, false)
+    local tile = nil
+    if not state.hasInteracted and cachedRocks and #cachedRocks > 0 then
+        local rock = cachedRocks[math.random(#cachedRocks)]
+        tile = WPOINT.new(rock.x, rock.y, 0)
+    end
+    Interact:Object(oreConfig.name, oreConfig.action, tile, 25)
     if not Utils.waitOrTerminate(function() return Utils.isMiningActive(state) or Inventory:IsFull() end, 30, 50, "Failed to start mining") then
         return false
     end

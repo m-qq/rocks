@@ -1740,6 +1740,7 @@ Routes.TO_ITHELL_BANK = {
     },
     {
         action = { walk = { waypoints = {{x = 2154, y = 3340}} } },
+        skip_if = { nearCoord = {x = 2154, y = 3340} },
         desc = "Walk to Ithell bank chest"
     }
 }
@@ -1775,10 +1776,11 @@ Routes.TO_ITHELL_CRYSTAL_SANDSTONE = {
     {
         action = { walk = { waypoints = {{x = 2185, y = 3361}, {x = 2162, y = 3361}, {x = 2145, y = 3352}} } },
         skip_if = { nearCoord = {x = 2153, y = 3340} },
-        desc = "Walk to crystal-flecked sandstone"
+        desc = "Walk from lodestone to crystal-flecked sandstone"
     },
     {
         action = { walk = { waypoints = {{x = 2145, y = 3352}} } },
+        skip_if = { nearCoord = {x = 2145, y = 3352} },
         desc = "Walk to crystal-flecked sandstone"
     }
 }
@@ -1792,10 +1794,11 @@ Routes.TO_ITHELL_SOFT_CLAY = {
     {
         action = { walk = { waypoints = {{x = 2185, y = 3361}, {x = 2162, y = 3361}, {x = 2145, y = 3346}} } },
         skip_if = { nearCoord = {x = 2153, y = 3340} },
-        desc = "Walk to Ithell soft clay mine"
+        desc = "Walk from lodestone to soft clay rocks"
     },
     {
         action = { walk = { waypoints = {{x = 2145, y = 3346}} } },
+        skip_if = { nearCoord = {x = 2145, y = 3346} },
         desc = "Walk to soft clay rocks"
     }
 }
