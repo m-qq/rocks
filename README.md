@@ -1,4 +1,5 @@
-mining things
+mining some rocks
 
 TODO:
-idk
+add more
+fix things
