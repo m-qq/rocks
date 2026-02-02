@@ -5,6 +5,10 @@ local DATA = require("aio mining/mining_data")
 
 local Routes = {}
 
+-- Reusable single-element buffers for GetAllObjArray1 calls
+local objIdBuf = {0}
+local objTypeBuf = {0}
+
 local function checkWaitCondition(wait)
     local coord = API.PlayerCoord()
 
@@ -34,7 +38,9 @@ local function checkWaitCondition(wait)
     end
 
     if wait.nearObject then
-        local objects = API.GetAllObjArray1({wait.nearObject.id}, 50, {wait.nearObject.type or 12})
+        objIdBuf[1] = wait.nearObject.id
+        objTypeBuf[1] = wait.nearObject.type or 12
+        local objects = API.GetAllObjArray1(objIdBuf, 50, objTypeBuf)
         if #objects == 0 then return false end
         local dist = Utils.getDistance(coord.x, coord.y, objects[1].Tile_XYZ.x, objects[1].Tile_XYZ.y)
         if dist > wait.nearObject.maxDistance then
@@ -43,7 +49,9 @@ local function checkWaitCondition(wait)
     end
 
     if wait.objectState then
-        local objects = API.GetAllObjArray1({wait.objectState.id}, 50, {wait.objectState.type or 12})
+        objIdBuf[1] = wait.objectState.id
+        objTypeBuf[1] = wait.objectState.type or 12
+        local objects = API.GetAllObjArray1(objIdBuf, 50, objTypeBuf)
         if #objects == 0 then return false end
         if objects[1].Bool1 ~= wait.objectState.value then
             return false
@@ -94,7 +102,9 @@ local function shouldSkipStep(skip_if)
     end
 
     if skip_if.objectState then
-        local objects = API.GetAllObjArray1({skip_if.objectState.id}, 50, {skip_if.objectState.type or 12})
+        objIdBuf[1] = skip_if.objectState.id
+        objTypeBuf[1] = skip_if.objectState.type or 12
+        local objects = API.GetAllObjArray1(objIdBuf, 50, objTypeBuf)
         if #objects > 0 and objects[1].Bool1 == skip_if.objectState.value then
             return true
         end
@@ -357,7 +367,7 @@ function Routes.travelTo(destination, selectedOre, fromLocationKey)
     if API.BankOpen2() then
         API.KeyboardPress2(0x1B, 60, 100)
         Utils.waitOrTerminate(function()
-            return not API.Compare2874Status(24, true)
+            return not API.Compare2874Status(24, false)
         end, 5, 100, "Bank did not close")
         API.RandomSleep2(600, 600, 300)
     end

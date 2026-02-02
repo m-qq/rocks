@@ -3,6 +3,12 @@ local DATA = require("aio mining/mining_data")
 
 local Utils = {}
 
+-- Reusable single-element buffers to avoid throwaway table allocations
+local containerCheckBuf = {0}
+local objIdBuf = {0}
+local objTypeBuf = {0}
+local rockertunityTypeBuf = {4}
+
 local function waitForCondition(condition, timeout, checkInterval)
     timeout = timeout or 10
     checkInterval = checkInterval or 50
@@ -176,15 +182,18 @@ local function getMiningStamina(miningLevel)
     return 0
 end
 
+local cachedMaxStamina = nil
+local cachedMaxStaminaLevel = nil
+
 function Utils.calculateMaxStamina()
     local miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
+    if miningLevel == cachedMaxStaminaLevel and cachedMaxStamina then
+        return cachedMaxStamina
+    end
+    cachedMaxStaminaLevel = miningLevel
     local agilityLevel = API.XPLevelTable(API.GetSkillXP("AGILITY"))
-
-    local miningStamina = getMiningStamina(miningLevel)
-    local agilityBonus = agilityLevel
-    local maxStamina = miningStamina + agilityBonus
-
-    return maxStamina
+    cachedMaxStamina = getMiningStamina(miningLevel) + agilityLevel
+    return cachedMaxStamina
 end
 
 function Utils.getStaminaDrain()
@@ -216,25 +225,24 @@ function Utils.getGemBagExtraInt(gemBagId)
     return item.Extra_ints[2] or 0
 end
 
-function Utils.getGemCounts(gemBagId)
+function Utils.getGemCounts(gemBagId, out)
+    out = out or {}
     local info = DATA.GEM_BAG_INFO[gemBagId]
     if info and info.useVarbits then
-        return {
-            sapphire = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.sapphire),
-            emerald = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.emerald),
-            ruby = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.ruby),
-            diamond = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.diamond),
-            dragonstone = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.dragonstone)
-        }
+        out.sapphire = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.sapphire)
+        out.emerald = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.emerald)
+        out.ruby = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.ruby)
+        out.diamond = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.diamond)
+        out.dragonstone = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.dragonstone)
+    else
+        local val = Utils.getGemBagExtraInt(gemBagId)
+        out.sapphire = val % 256
+        out.emerald = math.floor(val / 256) % 256
+        out.ruby = math.floor(val / 65536) % 256
+        out.diamond = math.floor(val / 16777216) % 256
+        out.dragonstone = 0
     end
-    local val = Utils.getGemBagExtraInt(gemBagId)
-    return {
-        sapphire = val % 256,
-        emerald = math.floor(val / 256) % 256,
-        ruby = math.floor(val / 65536) % 256,
-        diamond = math.floor(val / 16777216) % 256,
-        dragonstone = 0
-    }
+    return out
 end
 
 function Utils.getGemBagTotal(gemBagId)
@@ -523,6 +531,8 @@ end
 
 function Utils.clearRockCache()
     cachedRocks = nil
+    cachedRockertunityResult = nil
+    lastRockertunityTime = 0
 end
 
 -- Juju potion functions
@@ -560,7 +570,8 @@ function Utils.drinkJuju(potionDef)
     if not waitForCondition(function()
         local newTime = Utils.getBuffTimeRemaining(potionDef.buffId)
         if newTime > prevTime then return true end
-        if not API.Container_Check_Items(93, {potion.id}) then return true end
+        containerCheckBuf[1] = potion.id
+        if not API.Container_Check_Items(93, containerCheckBuf) then return true end
         return false
     end, 5, 100) then
         API.printlua("Failed to confirm potion was drunk", 4, false)
@@ -643,15 +654,16 @@ function Utils.isFamiliarActive(familiarDef)
 end
 
 function Utils.needsFamiliarRefresh(familiarDef)
+    local buffId = DATA.SUMMONING_BUFF_ID
     if Utils.isFamiliarActive(familiarDef) then
-        local remaining = Utils.getBuffTimeRemaining(familiarDef.buffId)
+        local remaining = Utils.getBuffTimeRemaining(buffId)
         if remaining <= 0 then
             return false
         end
-        if not familiarRefreshThresholds[familiarDef.buffId] then
-            familiarRefreshThresholds[familiarDef.buffId] = math.random(familiarDef.refreshMin, familiarDef.refreshMax)
+        if not familiarRefreshThresholds[buffId] then
+            familiarRefreshThresholds[buffId] = math.random(DATA.SUMMONING_REFRESH_MIN, DATA.SUMMONING_REFRESH_MAX)
         end
-        return remaining <= familiarRefreshThresholds[familiarDef.buffId]
+        return remaining <= familiarRefreshThresholds[buffId]
     end
     return true
 end
@@ -662,7 +674,8 @@ function Utils.summonFamiliar(familiarDef)
         return false
     end
 
-    if not API.Container_Check_Items(93, {familiarDef.pouchId}) then
+    containerCheckBuf[1] = familiarDef.pouchId
+    if not API.Container_Check_Items(93, containerCheckBuf) then
         API.printlua("No summoning pouch in inventory", 4, false)
         return false
     end
@@ -681,17 +694,18 @@ function Utils.summonFamiliar(familiarDef)
 
     API.RandomSleep2(600, 300, 300)
 
-    local newDuration = Utils.getBuffTimeRemaining(familiarDef.buffId)
-    familiarSummonTime[familiarDef.buffId] = API.ScriptRuntime()
-    familiarSummonDuration[familiarDef.buffId] = newDuration
-    familiarRefreshThresholds[familiarDef.buffId] = nil
+    local buffId = DATA.SUMMONING_BUFF_ID
+    local newDuration = Utils.getBuffTimeRemaining(buffId)
+    familiarSummonTime[buffId] = API.ScriptRuntime()
+    familiarSummonDuration[buffId] = newDuration
+    familiarRefreshThresholds[buffId] = nil
     return true
 end
 
 function Utils.getFamiliarTimeUntilRefresh(familiarDef)
     if not familiarDef then return 0 end
 
-    local buffId = familiarDef.buffId
+    local buffId = DATA.SUMMONING_BUFF_ID
     local buffValue = Utils.getBuffTimeRemaining(buffId)
 
     local lastValue = familiarLastBuffValue[buffId]
@@ -712,7 +726,7 @@ function Utils.getFamiliarTimeUntilRefresh(familiarDef)
     local elapsed = API.ScriptRuntime() - summonTime
     local remaining = summonDuration - elapsed
 
-    local threshold = familiarRefreshThresholds[buffId] or familiarDef.refreshMin
+    local threshold = familiarRefreshThresholds[buffId] or DATA.SUMMONING_REFRESH_MIN
     return math.max(0, remaining - threshold)
 end
 
@@ -770,8 +784,10 @@ function Utils.refreshSummoningPoints(miningLocation, selectedOre, familiarDef, 
     -- Wait for refresh object to load
     local obj = refreshLocation.refreshObject
     if obj and obj.id then
+        objIdBuf[1] = obj.id
+        objTypeBuf[1] = obj.type or 0
         if not waitForCondition(function()
-            local objects = API.GetAllObjArray1({obj.id}, 50, {obj.type or 0})
+            local objects = API.GetAllObjArray1(objIdBuf, 50, objTypeBuf)
             return #objects > 0
         end, 10, 100) then
             API.printlua(obj.name .. " not found after arriving", 4, false)
@@ -816,19 +832,16 @@ function Utils.refreshSummoningPoints(miningLocation, selectedOre, familiarDef, 
     local hasMorePouches = false
     if familiarDef then
         if Banking.withdrawSummoningPouch(familiarDef) then
-            hasMorePouches = API.Container_Check_Items(95, {familiarDef.pouchId})
-            local bankItem = API.Container_Get_s(95, familiarDef.pouchId)
-            local remaining = bankItem and bankItem.item_stack or 0
+            local remaining = Banking.getBankItemCount(familiarDef.pouchId)
+            hasMorePouches = remaining > 0
             API.printlua(familiarDef.name .. " pouches remaining in bank: " .. remaining, 0, false)
-        else
-            API.printlua("No " .. familiarDef.name .. " pouches in bank", 4, false)
         end
     end
 
     if API.BankOpen2() then
         API.KeyboardPress2(0x1B, 60, 100)
         Utils.waitOrTerminate(function()
-            return not API.Compare2874Status(24, true)
+            return not API.Compare2874Status(24, false)
         end, 5, 100, "Bank did not close")
         API.RandomSleep2(600, 600, 300)
     end
@@ -885,11 +898,21 @@ function Utils.shouldThreeTick(cfg, state)
     return ticksSinceLastInteract >= state.nextTickTarget
 end
 
-function Utils.findRockertunity(oreConfig)
-    local rockertunities = API.GetAllObjArray1(DATA.ROCKERTUNITY_IDS, 20, {4})
-    if #rockertunities == 0 then return nil end
+local cachedRockertunityResult = nil
+local lastRockertunityTime = 0
 
+function Utils.findRockertunity(oreConfig)
     if not cachedRocks or #cachedRocks == 0 then return nil end
+
+    local now = os.clock()
+    if now - lastRockertunityTime < 0.6 then
+        return cachedRockertunityResult
+    end
+    lastRockertunityTime = now
+    cachedRockertunityResult = nil
+
+    local rockertunities = API.GetAllObjArray1(DATA.ROCKERTUNITY_IDS, 20, rockertunityTypeBuf)
+    if #rockertunities == 0 then return nil end
 
     for _, rockertunity in ipairs(rockertunities) do
         for _, rock in ipairs(cachedRocks) do
@@ -897,11 +920,12 @@ function Utils.findRockertunity(oreConfig)
             local distance = Utils.getDistance(rock.x, rock.y, rockertunity.Tile_XYZ.x, rockertunity.Tile_XYZ.y)
             local match = customDist and (distance <= customDist) or (distance < 1)
             if match then
-                return {
+                cachedRockertunityResult = {
                     id = rock.id,
                     x = rock.x,
                     y = rock.y
                 }
+                return cachedRockertunityResult
             end
         end
     end
@@ -918,7 +942,7 @@ function Utils.mineRockertunity(oreConfig, rockTarget, state)
     state.lastInteractTime = os.time()
 
     local function isGone()
-        local rockertunities = API.GetAllObjArray1(DATA.ROCKERTUNITY_IDS, 20, {4})
+        local rockertunities = API.GetAllObjArray1(DATA.ROCKERTUNITY_IDS, 20, rockertunityTypeBuf)
         for _, rockertunity in ipairs(rockertunities) do
             local distance = Utils.getDistance(rockTarget.x, rockTarget.y, rockertunity.Tile_XYZ.x, rockertunity.Tile_XYZ.y)
             if distance <= math.sqrt(2) then

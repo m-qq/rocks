@@ -8,6 +8,58 @@ local Banking = {}
 
 local BANK_PIN_INTERFACE = { { 13,0,-1,0 }, { 13,25,-1,0 }, { 13,25,14,0 } }
 
+-- Pre-built static keep items set (never changes at runtime)
+local staticKeepItems = {
+    [DATA.ARCH_JOURNAL_ID] = true,
+    [DATA.RING_OF_KINSHIP_ID] = true,
+    [39018] = true  -- Senntisten scroll (unbankable)
+}
+for _, id in ipairs(DATA.SLAYER_CAPE_IDS) do
+    staticKeepItems[id] = true
+end
+for _, id in ipairs(DATA.DUNGEONEERING_CAPE_IDS) do
+    staticKeepItems[id] = true
+end
+for id in pairs(DATA.ALL_JUJU_IDS) do
+    staticKeepItems[id] = true
+end
+for id in pairs(DATA.ALL_SUMMONING_POUCH_IDS) do
+    staticKeepItems[id] = true
+end
+
+-- Reusable single-element table for Container_Check_Items calls
+local containerCheckBuf = {0}
+
+-- Cached bank item stacks: { [itemId] = stackCount }
+-- Populated once on first bank open, decremented on withdraw, never re-queried
+local bankCache = {}
+local bankCachePopulated = false
+
+local function populateBankCache()
+    if bankCachePopulated then return end
+    -- Query all juju potion IDs
+    for id in pairs(DATA.ALL_JUJU_IDS) do
+        local bankItem = API.Container_Get_s(95, id)
+        bankCache[id] = bankItem and bankItem.item_stack or 0
+    end
+    -- Query all summoning pouch IDs
+    for id in pairs(DATA.ALL_SUMMONING_POUCH_IDS) do
+        local bankItem = API.Container_Get_s(95, id)
+        bankCache[id] = bankItem and bankItem.item_stack or 0
+    end
+    bankCachePopulated = true
+end
+
+local function bankCacheGet(itemId)
+    return bankCache[itemId] or 0
+end
+
+local function bankCacheWithdraw(itemId, count)
+    count = count or 1
+    local current = bankCache[itemId] or 0
+    bankCache[itemId] = math.max(0, current - count)
+end
+
 Banking.LOCATIONS = {
     archaeology_campus = {
         name = "Archaeology Campus",
@@ -215,11 +267,11 @@ local function depositItem(itemId, itemName)
     if count == 0 then return true end
 
     local action = count > 1 and 7 or 1
-    API.printlua("Depositing " .. itemName .. " (count: " .. count .. ", action: " .. action .. ")", 0, false)
+    API.printlua(string.format("Depositing %s (count: %d, action: %d)", itemName, count, action), 0, false)
     API.DoAction_Bank_Inv(itemId, action, API.OFF_ACT_GeneralInterface_route2)
     return Utils.waitOrTerminate(function()
         return not Inventory:Contains(itemId)
-    end, 10, 100, "Failed to deposit " .. itemName)
+    end, 10, 100, string.format("Failed to deposit %s", itemName))
 end
 
 local function isBankPinOpen()
@@ -250,6 +302,7 @@ function Banking.openBank(bankLocation, bankPin)
 
     if API.BankOpen2() then
         API.RandomSleep2(600, 600, 300)
+        populateBankCache()
         return true
     end
 
@@ -269,6 +322,7 @@ function Banking.openBank(bankLocation, bankPin)
             return false
         end
         API.RandomSleep2(600, 600, 300)
+        populateBankCache()
         return true
     end
 
@@ -276,28 +330,12 @@ function Banking.openBank(bankLocation, bankPin)
 end
 
 function Banking.depositAllItems(oreBoxId, oreConfig, gemBagId)
-    local keepItems = {
-        [DATA.ARCH_JOURNAL_ID] = true,
-        [DATA.RING_OF_KINSHIP_ID] = true,
-        [39018] = true  -- Senntisten scroll (unbankable)
-    }
-    for _, id in ipairs(DATA.SLAYER_CAPE_IDS) do
-        keepItems[id] = true
-    end
-    for _, id in ipairs(DATA.DUNGEONEERING_CAPE_IDS) do
-        keepItems[id] = true
-    end
+    -- Add dynamic keep items (cleared after use)
     if oreBoxId then
-        keepItems[oreBoxId] = true
+        staticKeepItems[oreBoxId] = true
     end
     if gemBagId then
-        keepItems[gemBagId] = true
-    end
-    for id in pairs(DATA.ALL_JUJU_IDS) do
-        keepItems[id] = true
-    end
-    for id in pairs(DATA.ALL_SUMMONING_POUCH_IDS) do
-        keepItems[id] = true
+        staticKeepItems[gemBagId] = true
     end
 
     if oreBoxId and oreConfig then
@@ -329,12 +367,19 @@ function Banking.depositAllItems(oreBoxId, oreConfig, gemBagId)
     local inventory = Inventory:GetItems()
     for _, item in ipairs(inventory) do
         local itemId = item.id
-        if itemId > 0 and not keepItems[itemId] then
+        if itemId > 0 and not staticKeepItems[itemId] then
             if not depositItem(itemId, item.name) then
+                -- Clean up dynamic entries before returning
+                if oreBoxId then staticKeepItems[oreBoxId] = nil end
+                if gemBagId then staticKeepItems[gemBagId] = nil end
                 return false
             end
         end
     end
+
+    -- Clean up dynamic entries
+    if oreBoxId then staticKeepItems[oreBoxId] = nil end
+    if gemBagId then staticKeepItems[gemBagId] = nil end
 
     return true
 end
@@ -375,7 +420,8 @@ end
 
 function Banking.findJujuInInventory(potionDef)
     for _, potion in ipairs(potionDef.potions) do
-        if API.Container_Check_Items(93, {potion.id}) then
+        containerCheckBuf[1] = potion.id
+        if API.Container_Check_Items(93, containerCheckBuf) then
             return potion
         end
     end
@@ -384,7 +430,7 @@ end
 
 local function findBestJujuInBank(potionDef)
     for _, potion in ipairs(potionDef.potions) do
-        if API.Container_Check_Items(95, {potion.id}) then
+        if bankCacheGet(potion.id) > 0 then
             return potion
         end
     end
@@ -428,21 +474,17 @@ function Banking.withdrawJuju(potionDef)
         return false
     end
 
+    bankCacheWithdraw(potion.id)
     return true
 end
 
 function Banking.findSummoningPouchInInventory(familiarDef)
-    if API.Container_Check_Items(93, {familiarDef.pouchId}) then
-        return true
-    end
-    return false
+    containerCheckBuf[1] = familiarDef.pouchId
+    return API.Container_Check_Items(93, containerCheckBuf)
 end
 
 local function findSummoningPouchInBank(familiarDef)
-    if API.Container_Check_Items(95, {familiarDef.pouchId}) then
-        return true
-    end
-    return false
+    return bankCacheGet(familiarDef.pouchId) > 0
 end
 
 function Banking.withdrawSummoningPouch(familiarDef)
@@ -466,7 +508,12 @@ function Banking.withdrawSummoningPouch(familiarDef)
         return false
     end
 
+    bankCacheWithdraw(familiarDef.pouchId)
     return true
+end
+
+function Banking.getBankItemCount(itemId)
+    return bankCacheGet(itemId)
 end
 
 function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfig, bankPin, selectedOre, miningLocationKey, gemBagId, jujuDef, familiarDef)
@@ -502,8 +549,12 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
         end
 
         if familiarDef then
-            if not Banking.withdrawSummoningPouch(familiarDef) then
-                Banking.familiarWarning = "No " .. familiarDef.name .. " pouches available in bank"
+            local hasPouch = Banking.findSummoningPouchInInventory(familiarDef)
+            local needsPouch = not hasPouch and (not Utils.isFamiliarActive(familiarDef) or Utils.needsFamiliarRefresh(familiarDef))
+            if needsPouch then
+                if not Banking.withdrawSummoningPouch(familiarDef) then
+                    Banking.familiarWarning = "No " .. familiarDef.name .. " pouches available in bank"
+                end
             end
         end
     end

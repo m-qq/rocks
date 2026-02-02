@@ -182,14 +182,39 @@ for _, def in pairs(DATA.JUJU_POTIONS) do
     end
 end
 
+DATA.SUMMONING_BUFF_ID = 26095
+DATA.SUMMONING_REFRESH_MIN = 3
+DATA.SUMMONING_REFRESH_MAX = 120
+
 DATA.SUMMONING_FAMILIARS = {
+    desert_wyrm = {
+        name = "Desert wyrm",
+        pouchId = 12049,
+        pointsCost = 10,
+        levelReq = 18,
+    },
+    void_ravager = {
+        name = "Void ravager",
+        pouchId = 12818,
+        pointsCost = 40,
+        levelReq = 34,
+    },
+    obsidian_golem = {
+        name = "Obsidian golem",
+        pouchId = 12792,
+        pointsCost = 80,
+        levelReq = 73,
+    },
+    gargoyle = {
+        name = "Gargoyle",
+        pouchId = 49408,
+        pointsCost = 100,
+        levelReq = 75,
+    },
     lava_titan = {
-        name = "Lava Titan",
+        name = "Lava titan",
         pouchId = 12788,
-        buffId = 26095,
         pointsCost = 90,
-        refreshMin = 3,
-        refreshMax = 120,
         levelReq = 83,
     },
 }

@@ -20,10 +20,19 @@ function MiningGUI.reset()
     MiningGUI.selectConfigTab = true
     MiningGUI.selectWarningsTab = false
     MiningGUI.selectInfoTab = false
+    MiningGUI._filteredLocNames = nil
+    MiningGUI._filteredLocMapping = nil
+    MiningGUI._familiarKeys = nil
+    MiningGUI._familiarNames = nil
+    MiningGUI._refreshKeys = nil
+    MiningGUI._refreshNames = nil
 end
 
 function MiningGUI.addWarning(msg)
     MiningGUI.warnings[#MiningGUI.warnings + 1] = msg
+    if #MiningGUI.warnings > 50 then
+        table.remove(MiningGUI.warnings, 1)
+    end
 end
 
 function MiningGUI.clearWarnings()
@@ -417,12 +426,19 @@ local function drawConfigTab(cfg, gui)
 
     local selectedOreKey = oreKeys[cfg.oreIndex + 1]
     local filteredLocIndices = getFilteredLocationIndices(selectedOreKey)
-    local filteredLocNames = {}
-    local filteredLocMapping = {}
-    for i, globalIdx in ipairs(filteredLocIndices) do
-        filteredLocNames[i] = locationNames[globalIdx]
-        filteredLocMapping[i] = globalIdx
+    local filteredLocNames = gui._filteredLocNames or {}
+    local filteredLocMapping = gui._filteredLocMapping or {}
+    for i = 1, math.max(#filteredLocNames, #filteredLocIndices) do
+        if i <= #filteredLocIndices then
+            filteredLocNames[i] = locationNames[filteredLocIndices[i]]
+            filteredLocMapping[i] = filteredLocIndices[i]
+        else
+            filteredLocNames[i] = nil
+            filteredLocMapping[i] = nil
+        end
     end
+    gui._filteredLocNames = filteredLocNames
+    gui._filteredLocMapping = filteredLocMapping
     local currentFilteredIdx = 0
     for i, globalIdx in ipairs(filteredLocIndices) do
         if (globalIdx - 1) == cfg.locationIndex then
@@ -548,15 +564,25 @@ local function drawConfigTab(cfg, gui)
     end
 
     -- Summoning
-    local summoningLevel = API.XPLevelTable(API.GetSkillXP("SUMMONING"))
-    local familiarKeys = {"none"}
-    local familiarNames = {"None"}
-    for key, def in pairs(DATA.SUMMONING_FAMILIARS) do
-        if not def.levelReq or summoningLevel >= def.levelReq then
-            familiarKeys[#familiarKeys + 1] = key
-            familiarNames[#familiarNames + 1] = def.name
+    if not gui._familiarKeys then
+        local summoningLevel = API.XPLevelTable(API.GetSkillXP("SUMMONING"))
+        gui._familiarKeys = {"none"}
+        gui._familiarNames = {"None"}
+        for key, def in pairs(DATA.SUMMONING_FAMILIARS) do
+            if not def.levelReq or summoningLevel >= def.levelReq then
+                gui._familiarKeys[#gui._familiarKeys + 1] = key
+                gui._familiarNames[#gui._familiarNames + 1] = def.name
+            end
+        end
+        gui._refreshKeys = {}
+        gui._refreshNames = {}
+        for key, loc in pairs(DATA.SUMMONING_REFRESH_LOCATIONS) do
+            gui._refreshKeys[#gui._refreshKeys + 1] = key
+            gui._refreshNames[#gui._refreshNames + 1] = loc.name
         end
     end
+    local familiarKeys = gui._familiarKeys
+    local familiarNames = gui._familiarNames
 
     if #familiarKeys > 1 then
         local currentFamiliarIdx = 0
@@ -573,12 +599,8 @@ local function drawConfigTab(cfg, gui)
         end
 
         if cfg.useSummoning ~= "none" then
-            local refreshKeys = {}
-            local refreshNames = {}
-            for key, loc in pairs(DATA.SUMMONING_REFRESH_LOCATIONS) do
-                refreshKeys[#refreshKeys + 1] = key
-                refreshNames[#refreshNames + 1] = loc.name
-            end
+            local refreshKeys = gui._refreshKeys
+            local refreshNames = gui._refreshNames
             local currentRefreshIdx = 0
             for i, key in ipairs(refreshKeys) do
                 if key == cfg.summoningRefreshLocation then
@@ -901,8 +923,12 @@ function MiningGUI.draw(data)
     ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 3)
     ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 5)
 
-    local title = "Miner - " .. API.ScriptRuntimeString() .. "###Miner"
-    local visible = ImGui.Begin(title, 0)
+    local now = os.clock()
+    if not MiningGUI._titleCache or now - (MiningGUI._titleCacheTime or 0) >= 1 then
+        MiningGUI._titleCache = "Miner - " .. API.ScriptRuntimeString() .. "###Miner"
+        MiningGUI._titleCacheTime = now
+    end
+    local visible = ImGui.Begin(MiningGUI._titleCache, 0)
 
     if visible then
         local ok, err = pcall(drawContent, data, MiningGUI)

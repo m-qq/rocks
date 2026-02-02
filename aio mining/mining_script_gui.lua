@@ -160,39 +160,49 @@ local startXP = API.GetSkillXP("MINING")
 local startLevel = API.XPLevelTable(startXP)
 local startCraftingXP = (ore.isGemRock and cfg.cutAndDrop) and API.GetSkillXP("CRAFTING") or 0
 
-local function buildGUIData()
-    local oreName = ore.name:gsub(" rock$", "")
-
-    local guiData = {
-        currentStamina = Utils.getStaminaDrain(),
-        maxStamina = Utils.calculateMaxStamina(),
-        noStamina = ore.noStamina,
-        state = state.currentState,
-        location = loc.name,
-        oreName = oreName,
-        bankLocation = bank and bank.name or "None (stackable)",
-        antiIdleTime = idleHandler.getTimeUntilNextIdle()
+local oreName = ore.name:gsub(" rock$", "")
+local guiData = {
+    currentStamina = 0,
+    maxStamina = 1,
+    noStamina = ore.noStamina,
+    state = "Idle",
+    location = loc.name,
+    oreName = oreName,
+    bankLocation = bank and bank.name or "None (stackable)",
+    antiIdleTime = 0,
+    mode = cfg.dropOres and "Drop" or cfg.threeTickMining and "3-Tick Mining" or nil,
+    metrics = {
+        currentLevel = 0, levelsGained = 0, xpGained = 0,
+        xpPerHour = 0, xpRemaining = 0, levelProgress = 0,
+        ttl = 0, maxLevel = false, crafting = nil,
+    },
+}
+if loc.dailyLimit then guiData.dailyLimit = { current = 0, max = loc.dailyLimit.max } end
+if state.playerOreBox then guiData.oreBox = { name = "", count = 0, capacity = 0 } end
+if state.gemBagId and ore.isGemRock then
+    guiData.gemBag = {
+        total = 0, capacity = 0, perGemCapacity = nil,
+        sapphire = 0, emerald = 0, ruby = 0, diamond = 0, dragonstone = 0,
     }
+end
+if ore.isGemRock and cfg.cutAndDrop then
+    guiData.metrics.crafting = { level = 0, xpPerHour = 0, levelProgress = 0, ttl = 0, maxLevel = false }
+end
 
-    if cfg.dropOres then
-        guiData.mode = "Drop"
-    elseif cfg.threeTickMining then
-        guiData.mode = "3-Tick Mining"
+local function buildGUIData()
+    guiData.currentStamina = Utils.getStaminaDrain()
+    guiData.maxStamina = Utils.calculateMaxStamina()
+    guiData.state = state.currentState
+    guiData.antiIdleTime = idleHandler.getTimeUntilNextIdle()
+
+    if guiData.dailyLimit then
+        guiData.dailyLimit.current = API.GetVarbitValue(loc.dailyLimit.varbit)
     end
 
-    if loc.dailyLimit then
-        guiData.dailyLimit = {
-            current = API.GetVarbitValue(loc.dailyLimit.varbit),
-            max = loc.dailyLimit.max
-        }
-    end
-
-    if state.playerOreBox then
-        guiData.oreBox = {
-            name = OreBox.getName(state.playerOreBox),
-            count = OreBox.getOreCount(ore),
-            capacity = oreBoxCapacity
-        }
+    if guiData.oreBox then
+        guiData.oreBox.name = OreBox.getName(state.playerOreBox)
+        guiData.oreBox.count = OreBox.getOreCount(ore)
+        guiData.oreBox.capacity = oreBoxCapacity
     end
 
     local currentXP = API.GetSkillXP("MINING")
@@ -207,18 +217,17 @@ local function buildGUIData()
     local levelProgress = nextLevelXP > 0 and ((currentXP - currentLevelXP) / levelRange) or 1
     local ttl = xpPerHour > 0 and xpRemaining > 0 and (xpRemaining / xpPerHour) * 3600 or 0
 
-    guiData.metrics = {
-        currentLevel = currentLevel,
-        levelsGained = currentLevel - startLevel,
-        xpGained = xpGained,
-        xpPerHour = xpPerHour,
-        xpRemaining = xpRemaining,
-        levelProgress = levelProgress,
-        ttl = ttl,
-        maxLevel = currentLevel >= 120
-    }
+    local m = guiData.metrics
+    m.currentLevel = currentLevel
+    m.levelsGained = currentLevel - startLevel
+    m.xpGained = xpGained
+    m.xpPerHour = xpPerHour
+    m.xpRemaining = xpRemaining
+    m.levelProgress = levelProgress
+    m.ttl = ttl
+    m.maxLevel = currentLevel >= 120
 
-    if ore.isGemRock and cfg.cutAndDrop then
+    if m.crafting then
         local craftXP = API.GetSkillXP("CRAFTING")
         local craftLevel = API.XPLevelTable(craftXP)
         local craftGained = craftXP - startCraftingXP
@@ -229,46 +238,38 @@ local function buildGUIData()
         local craftRange = craftNextXP > 0 and (craftNextXP - craftCurXP) or 1
         local craftProgress = craftNextXP > 0 and ((craftXP - craftCurXP) / craftRange) or 1
         local craftTtl = craftPerHour > 0 and craftRemaining > 0 and (craftRemaining / craftPerHour) * 3600 or 0
-
-        guiData.metrics.crafting = {
-            level = craftLevel,
-            xpPerHour = craftPerHour,
-            levelProgress = craftProgress,
-            ttl = craftTtl,
-            maxLevel = craftLevel >= 120
-        }
+        m.crafting.level = craftLevel
+        m.crafting.xpPerHour = craftPerHour
+        m.crafting.levelProgress = craftProgress
+        m.crafting.ttl = craftTtl
+        m.crafting.maxLevel = craftLevel >= 120
     end
 
-    if state.gemBagId and ore.isGemRock then
-        local counts = Utils.getGemCounts(state.gemBagId)
+    if guiData.gemBag then
+        Utils.getGemCounts(state.gemBagId, guiData.gemBag)
         local info = Utils.getGemBagInfo(state.gemBagId)
-        guiData.gemBag = {
-            total = counts.sapphire + counts.emerald + counts.ruby + counts.diamond + counts.dragonstone,
-            capacity = Utils.getGemBagCapacity(state.gemBagId),
-            perGemCapacity = info and info.perGemCapacity or nil,
-            sapphire = counts.sapphire,
-            emerald = counts.emerald,
-            ruby = counts.ruby,
-            diamond = counts.diamond,
-            dragonstone = counts.dragonstone
-        }
+        guiData.gemBag.total = guiData.gemBag.sapphire + guiData.gemBag.emerald + guiData.gemBag.ruby + guiData.gemBag.diamond + guiData.gemBag.dragonstone
+        guiData.gemBag.capacity = Utils.getGemBagCapacity(state.gemBagId)
+        guiData.gemBag.perGemCapacity = info and info.perGemCapacity or nil
     end
 
     if state.jujuDef then
         local buffActive = Utils.getBuffTimeRemaining(state.jujuDef.buffId) > 0
         local hasPotion = Banking.findJujuInInventory(state.jujuDef) ~= nil
         if buffActive or hasPotion then
-            guiData.juju = {
-                timeUntilRefresh = Utils.getJujuTimeUntilRefresh(state.jujuDef),
-            }
+            if not guiData.juju then guiData.juju = {} end
+            guiData.juju.timeUntilRefresh = Utils.getJujuTimeUntilRefresh(state.jujuDef)
+        else
+            guiData.juju = nil
         end
     end
 
     if state.familiarDef then
-        guiData.familiar = {
-            timeUntilRefresh = Utils.getFamiliarTimeUntilRefresh(state.familiarDef),
-            summoningPoints = Utils.getSummoningPoints(),
-        }
+        if not guiData.familiar then guiData.familiar = {} end
+        guiData.familiar.timeUntilRefresh = Utils.getFamiliarTimeUntilRefresh(state.familiarDef)
+        guiData.familiar.summoningPoints = Utils.getSummoningPoints()
+    else
+        guiData.familiar = nil
     end
 
     return guiData
@@ -285,9 +286,15 @@ API.printlua("3-tick Mining: " .. tostring(cfg.threeTickMining), 0, false)
 API.printlua("Starting GUI Mining Script...", 0, false)
 
 ClearRender()
+local lastGUIUpdate = 0
 DrawImGui(function()
     if MiningGUI.open then
-        MiningGUI.draw(buildGUIData())
+        local now = os.clock()
+        if now - lastGUIUpdate >= 0.5 then
+            buildGUIData()
+            lastGUIUpdate = now
+        end
+        MiningGUI.draw(guiData)
     end
 end)
 
@@ -317,9 +324,7 @@ local success, err = pcall(function()
                 local refreshOk, hasMorePouches = Utils.refreshSummoningPoints(loc, cfg.ore, state.familiarDef, state.playerOreBox, ore, state.gemBagId, state.summoningRefreshLocation)
                 if refreshOk then
                     state.familiarWarned = false
-                    state.rocksScanned = false
                     state.hasInteracted = false
-                    Utils.clearRockCache()
                     if not hasMorePouches then
                         state.familiarDef = nil
                         MiningGUI.addWarning("No more familiar pouches in bank - disabling summoning")
@@ -342,9 +347,7 @@ local success, err = pcall(function()
             Utils.dropAllOres(ore, state)
         elseif Utils.needsBanking(cfg, ore, state) then
             state.currentState = "Banking"
-            state.rocksScanned = false
             state.hasInteracted = false
-            Utils.clearRockCache()
             Banking.jujuWarning = nil
             Banking.familiarWarning = nil
             if not Banking.performBanking(bank, loc, state.playerOreBox, ore, cfg.bankPin, cfg.ore, cfg.location, state.gemBagId, state.jujuDef, state.familiarDef) then

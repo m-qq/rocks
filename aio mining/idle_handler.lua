@@ -32,7 +32,7 @@ function idleHandler.getTimeUntilNextIdle()
 end
 
 function idleHandler.collectGarbage()
-    collectgarbage("step", 100)
+    collectgarbage("step", 500)
 end
 
 return idleHandler
