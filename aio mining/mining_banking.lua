@@ -6,6 +6,21 @@ local Routes = require("aio mining/mining_routes")
 
 local Banking = {}
 
+-- Set during startup if the configured bank is a metal bank.
+-- Used by performBanking to detour for withdrawals.
+Banking.fallbackBank = nil
+
+--- Close the bank window if open. Press Escape, wait for close, short sleep.
+function Banking.closeBank()
+    if API.BankOpen2() then
+        API.KeyboardPress2(0x1B, 60, 100)
+        Utils.waitOrTerminate(function()
+            return not API.Compare2874Status(24, false)
+        end, 5, 100, "Bank did not close")
+        API.RandomSleep2(600, 600, 300)
+    end
+end
+
 local BANK_PIN_INTERFACE = { { 13,0,-1,0 }, { 13,25,-1,0 }, { 13,25,14,0 } }
 
 -- Pre-built static keep items set (never changes at runtime)
@@ -266,7 +281,15 @@ local function depositItem(itemId, itemName)
     local count = Inventory:GetItemAmount(itemId)
     if count == 0 then return true end
 
-    local action = count > 1 and 7 or 1
+    -- For single items, action is always 2
+    -- For multiple items, action depends on varbit 45189 (7 if vb==7, else use action 7 for deposit-all)
+    local action
+    if count == 1 then
+        action = 2
+    else
+        local vb = API.GetVarbitValue(45189)
+        action = vb == 7 and 1 or 7
+    end
     API.printlua(string.format("Depositing %s (count: %d, action: %d)", itemName, count, action), 0, false)
     API.DoAction_Bank_Inv(itemId, action, API.OFF_ACT_GeneralInterface_route2)
     return Utils.waitOrTerminate(function()
@@ -288,6 +311,18 @@ function Banking.openBank(bankLocation, bankPin)
     API.printlua("Opening bank...", 5, false)
     local bank = bankLocation.bank
     local range = bank.range or 40
+
+    -- Wait for bank object/NPC to load before interacting
+    local bankName = bank.npc or bank.object
+    local searchTypes = bank.npc and {1} or {0, 12}
+    if not Utils.waitOrTerminate(function()
+        local results = API.ReadAllObjectsArray(searchTypes, {-1}, {bankName})
+        return #results > 0
+    end, 15, 100, "Bank object did not load: " .. bankName) then
+        return false
+    end
+    API.RandomSleep2(600, 300, 300)
+
     if bank.npc then
         Interact:NPC(bank.npc, bank.action, range)
     else
@@ -330,18 +365,10 @@ function Banking.openBank(bankLocation, bankPin)
 end
 
 function Banking.depositAllItems(oreBoxId, oreConfig, gemBagId)
-    -- Add dynamic keep items (cleared after use)
-    if oreBoxId then
-        staticKeepItems[oreBoxId] = true
-    end
-    if gemBagId then
-        staticKeepItems[gemBagId] = true
-    end
-
     if oreBoxId and oreConfig then
         local currentCount = OreBox.getOreCount(oreConfig)
         if currentCount > 0 then
-            API.printlua("Depositing ore box contents...", 5, false)
+            API.printlua("Depositing ore box contents...", 0, false)
             API.DoAction_Bank_Inv(oreBoxId, 8, API.OFF_ACT_GeneralInterface_route2)
             if not Utils.waitOrTerminate(function()
                 return OreBox.getOreCount(oreConfig) == 0
@@ -354,7 +381,7 @@ function Banking.depositAllItems(oreBoxId, oreConfig, gemBagId)
     if gemBagId then
         local gemTotal = Utils.getGemBagTotal(gemBagId)
         if gemTotal > 0 then
-            API.printlua("Depositing gem bag contents...", 5, false)
+            API.printlua("Depositing gem bag contents...", 0, false)
             API.DoAction_Bank_Inv(gemBagId, 8, API.OFF_ACT_GeneralInterface_route2)
             if not Utils.waitOrTerminate(function()
                 return Utils.getGemBagTotal(gemBagId) == 0
@@ -367,19 +394,13 @@ function Banking.depositAllItems(oreBoxId, oreConfig, gemBagId)
     local inventory = Inventory:GetItems()
     for _, item in ipairs(inventory) do
         local itemId = item.id
-        if itemId > 0 and not staticKeepItems[itemId] then
+        local keep = staticKeepItems[itemId] or itemId == oreBoxId or itemId == gemBagId
+        if itemId > 0 and not keep then
             if not depositItem(itemId, item.name) then
-                -- Clean up dynamic entries before returning
-                if oreBoxId then staticKeepItems[oreBoxId] = nil end
-                if gemBagId then staticKeepItems[gemBagId] = nil end
                 return false
             end
         end
     end
-
-    -- Clean up dynamic entries
-    if oreBoxId then staticKeepItems[oreBoxId] = nil end
-    if gemBagId then staticKeepItems[gemBagId] = nil end
 
     return true
 end

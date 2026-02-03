@@ -367,13 +367,8 @@ function Routes.travelTo(destination, selectedOre, fromLocationKey)
     end
 
     -- Close bank if open before teleporting
-    if API.BankOpen2() then
-        API.KeyboardPress2(0x1B, 60, 100)
-        Utils.waitOrTerminate(function()
-            return not API.Compare2874Status(24, false)
-        end, 5, 100, "Bank did not close")
-        API.RandomSleep2(600, 600, 300)
-    end
+    local Banking = require("aio mining/mining_banking")
+    Banking.closeBank()
 
     API.printlua("Traveling to " .. destination.name .. "...", 5, false)
     if not Routes.execute(route) then

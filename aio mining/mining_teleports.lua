@@ -155,20 +155,20 @@ function Teleports.getEquippedCape(capeIds)
     return nil
 end
 
-function Teleports.hasSlayerCape()
-    if Teleports.getEquippedCape(DATA.SLAYER_CAPE_IDS) then return true end
-    for _, id in ipairs(DATA.SLAYER_CAPE_IDS) do
+local function hasCape(capeIds)
+    if Teleports.getEquippedCape(capeIds) then return true end
+    for _, id in ipairs(capeIds) do
         if Inventory:Contains(id) then return true end
     end
     return false
 end
 
+function Teleports.hasSlayerCape()
+    return hasCape(DATA.SLAYER_CAPE_IDS)
+end
+
 function Teleports.hasDungeoneeringCape()
-    if Teleports.getEquippedCape(DATA.DUNGEONEERING_CAPE_IDS) then return true end
-    for _, id in ipairs(DATA.DUNGEONEERING_CAPE_IDS) do
-        if Inventory:Contains(id) then return true end
-    end
-    return false
+    return hasCape(DATA.DUNGEONEERING_CAPE_IDS)
 end
 
 Teleports.SLAYER_DESTINATIONS = {
@@ -457,9 +457,11 @@ function Teleports.archJournal()
         API.printlua("Using equipped archaeology journal to teleport...", 5, false)
         API.DoAction_Interface(0xffffffff, DATA.ARCH_JOURNAL_ID, 2, 1464, 15, 17, API.OFF_ACT_GeneralInterface_route)
     else
-        local journal = Inventory:GetItem(DATA.ARCH_JOURNAL_ID)
-        local slot = journal[1].slot
-        API.printlua("Using archaeology journal (inventory slot " .. slot .. ") to teleport...", 5, false)
+        if not Inventory:Contains(DATA.ARCH_JOURNAL_ID) then
+            API.printlua("Archaeology journal not found in inventory", 4, false)
+            return false
+        end
+        API.printlua("Using archaeology journal to teleport...", 0, false)
         API.DoAction_Inventory1(DATA.ARCH_JOURNAL_ID, 0, 7, API.OFF_ACT_GeneralInterface_route2)
     end
 
