@@ -972,7 +972,10 @@ function Utils.mineRock(oreConfig, state)
     local tile = nil
     if not state.hasInteracted and cachedRocks and #cachedRocks > 0 then
         local rock = cachedRocks[math.random(#cachedRocks)]
-        tile = WPOINT.new(rock.x, rock.y, 0)
+        local tileX = math.floor(rock.x)
+        local tileY = math.floor(rock.y)
+        API.printlua(string.format("Selected rock: x=%.2f y=%.2f -> tile=(%d,%d)", rock.x, rock.y, tileX, tileY), 0, false)
+        tile = WPOINT.new(tileX, tileY, 0)
     end
     Interact:Object(oreConfig.name, oreConfig.action, tile, 25)
     if not Utils.waitOrTerminate(function() return Utils.isMiningActive(state) or Inventory:IsFull() end, 30, 50, "Failed to start mining") then

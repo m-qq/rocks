@@ -15,8 +15,6 @@ API.SetDrawTrackedSkills(false)
 
 ClearRender()
 MiningGUI.reset()
-MiningGUI.setScriptName("mining_script_gui.lua")
-MiningGUI.loadConfig()
 
 DrawImGui(function()
     if MiningGUI.open then
