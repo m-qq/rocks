@@ -26,6 +26,8 @@ function MiningGUI.reset()
     MiningGUI._familiarNames = nil
     MiningGUI._refreshKeys = nil
     MiningGUI._refreshNames = nil
+    MiningGUI.uiMode = "presets"
+    MiningGUI.presetSaveName = ""
     -- Reset preset popup state
     MiningGUI.presetPopup.open = false
     MiningGUI.presetPopup.mode = nil
@@ -144,6 +146,10 @@ local function loadAllPresets()
     return presetsCache
 end
 
+local function invalidatePresetsCache()
+    presetsCache = nil
+end
+
 local function saveAllPresets()
     local file = io.open(PRESETS_FILE, "w")
     if not file then return false end
@@ -219,6 +225,7 @@ local function deletePreset(presetName)
     local presets = loadAllPresets()
     presets[presetName] = nil
     saveAllPresets()
+    invalidatePresetsCache()
 end
 
 -- Returns filtered location indices (1-based into locationKeys) for a given ore
@@ -557,8 +564,8 @@ local function drawConfigSummary(cfg)
 end
 
 -- UI mode: "presets" shows preset list, "setup" shows configuration
-local uiMode = "presets"
-local presetSaveName = ""
+MiningGUI.uiMode = "presets"
+MiningGUI.presetSaveName = ""
 
 local function getPresetNames()
     return listPresets()
@@ -611,10 +618,10 @@ local function drawConfigTab(cfg, gui)
 
     -- Auto-switch to setup mode if no presets
     if #presetNames == 0 then
-        uiMode = "setup"
+        gui.uiMode = "setup"
     end
 
-    if uiMode == "presets" then
+    if gui.uiMode == "presets" then
         local toDelete = nil
         local rowH, xWidth, rounding = 26, 28, 3
         local listHeight = math.min(#presetNames * 36, 216)
@@ -671,8 +678,8 @@ local function drawConfigTab(cfg, gui)
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.24, 0.32, 0.45, 1.0)
         ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.16, 0.22, 0.32, 1.0)
         if ImGui.Button("+ New Preset", -1, 30) then
-            uiMode = "setup"
-            presetSaveName = ""
+            gui.uiMode = "setup"
+            gui.presetSaveName = ""
         end
         ImGui.PopStyleColor(3)
 
@@ -686,7 +693,7 @@ local function drawConfigTab(cfg, gui)
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.30, 0.34, 0.40, 1.0)
         ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.26, 0.30, 0.36, 1.0)
         if ImGui.Button("< Back", 70, 22) then
-            uiMode = "presets"
+            gui.uiMode = "presets"
         end
         ImGui.PopStyleColor(3)
         ImGui.Spacing()
@@ -937,9 +944,9 @@ local function drawConfigTab(cfg, gui)
     ImGui.PopStyleColor(1)
 
     ImGui.PushItemWidth(-1)
-    local nameChanged, newName = ImGui.InputText("##saveName", presetSaveName, 0)
+    local nameChanged, newName = ImGui.InputText("##saveName", gui.presetSaveName, 0)
     if nameChanged then
-        presetSaveName = newName
+        gui.presetSaveName = newName
     end
     ImGui.PopItemWidth()
 
@@ -950,11 +957,11 @@ local function drawConfigTab(cfg, gui)
     ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.30, 0.52, 0.35, 1.0)
     ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.22, 0.40, 0.27, 1.0)
 
-    local buttonLabel = presetSaveName ~= "" and "Save & Start" or "Start"
+    local buttonLabel = gui.presetSaveName ~= "" and "Save & Start" or "Start"
     if ImGui.Button(buttonLabel .. "##start", -1, 32) then
         -- Save preset if name provided
-        if presetSaveName ~= "" then
-            local name = presetSaveName:match("^%s*(.-)%s*$")  -- trim
+        if gui.presetSaveName ~= "" then
+            local name = gui.presetSaveName:match("^%s*(.-)%s*$")  -- trim
             if name ~= "" then
                 gui.savePreset(name)
             end
