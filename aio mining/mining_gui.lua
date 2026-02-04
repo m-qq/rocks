@@ -28,13 +28,6 @@ function MiningGUI.reset()
     MiningGUI._refreshNames = nil
     MiningGUI.uiMode = "presets"
     MiningGUI.presetSaveName = ""
-    -- Reset preset popup state
-    MiningGUI.presetPopup.open = false
-    MiningGUI.presetPopup.mode = nil
-    MiningGUI.presetPopup.inputName = ""
-    MiningGUI.presetPopup.presetList = {}
-    MiningGUI.presetPopup.selectedIndex = 0
-    MiningGUI.presetPopup.errorMsg = nil
 end
 
 function MiningGUI.addWarning(msg)
@@ -111,16 +104,6 @@ end
 
 local PRESETS_FILE = os.getenv("USERPROFILE") .. "\\MemoryError\\Lua_Scripts\\aio mining\\mining_presets.json"
 
--- Preset management state
-MiningGUI.presetPopup = {
-    open = false,
-    mode = nil, -- "save" or "load"
-    inputName = "",
-    presetList = {},
-    selectedIndex = 0,
-    errorMsg = nil,
-}
-
 -- In-memory cache of all presets (loaded once, updated on save/delete)
 local presetsCache = nil
 
@@ -146,8 +129,11 @@ local function loadAllPresets()
     return presetsCache
 end
 
+local presetNamesCache = nil
+
 local function invalidatePresetsCache()
     presetsCache = nil
+    presetNamesCache = nil
 end
 
 local function saveAllPresets()
@@ -168,12 +154,14 @@ local function saveAllPresets()
 end
 
 local function listPresets()
+    if presetNamesCache then return presetNamesCache end
     local presets = loadAllPresets()
     local names = {}
     for name in pairs(presets) do
         names[#names + 1] = name
     end
     table.sort(names)
+    presetNamesCache = names
     return names
 end
 
@@ -213,6 +201,7 @@ local function savePresetToFile(presetName, cfg)
     if not saveAllPresets() then
         return false, "Failed to save presets file"
     end
+    presetNamesCache = nil  -- invalidate names cache for new preset
     return true
 end
 
@@ -567,39 +556,6 @@ end
 MiningGUI.uiMode = "presets"
 MiningGUI.presetSaveName = ""
 
-local function getPresetNames()
-    return listPresets()
-end
-
-local function getPresetInfo(name)
-    local data = loadPresetFromFile(name)
-    if not data then return { ore = "?", location = "?", bank = "?", mode = "?" } end
-    local info = {}
-    local oreDef = ORES[data.Ore]
-    info.ore = oreDef and oreDef.name or "?"
-    local locDef = LOCATIONS[data.MiningLocation]
-    info.location = locDef and locDef.name or "?"
-    local bankDef = Banking.LOCATIONS[data.BankingLocation]
-    info.bank = bankDef and bankDef.name or "?"
-    local isGemRock = oreDef and oreDef.isGemRock
-    -- Mode based on ore type
-    if isGemRock then
-        if data.DropGems then info.mode = "Drop"
-        elseif data.CutAndDrop then info.mode = "Cut & Drop"
-        elseif data.UseGemBag then info.mode = "Gem Bag"
-        else info.mode = "Bank" end
-    else
-        if data.DropOres then info.mode = "Drop"
-        elseif data.UseOreBox then info.mode = "Ore Box"
-        else info.mode = "Bank" end
-    end
-    -- Extras (only show if valid for ore type)
-    info.rock = not isGemRock and data.ChaseRockertunities and not (oreDef and oreDef.noRockertunities)
-    info.juju = not isGemRock and data.UseJuju and data.UseJuju ~= "none"
-    info.summon = data.UseSummoning and data.UseSummoning ~= "none"
-    return info
-end
-
 local function drawConfigTab(cfg, gui)
     if gui.started then
         local runText = "Running"
@@ -614,7 +570,7 @@ local function drawConfigTab(cfg, gui)
         return
     end
 
-    local presetNames = getPresetNames()
+    local presetNames = listPresets()
 
     -- Auto-switch to setup mode if no presets
     if #presetNames == 0 then
@@ -1158,162 +1114,6 @@ local function drawWarningsTab(gui)
         gui.warnings = {}
     end
     ImGui.PopStyleColor(3)
-end
-
-local function drawPresetPopup(gui)
-    local popup = gui.presetPopup
-    if not popup.open then return end
-
-    local popupTitle = popup.mode == "save" and "Save Preset###presetPopup" or "Load Preset###presetPopup"
-    ImGui.SetNextWindowSize(280, 0, ImGuiCond.Always)
-    ImGui.SetNextWindowPos(150, 150, ImGuiCond.FirstUseEver)
-
-    local visible = ImGui.Begin(popupTitle, ImGuiWindowFlags.NoCollapse)
-    if visible then
-        if popup.mode == "save" then
-            -- Save mode: input field for preset name
-            label("Preset Name")
-            ImGui.PushItemWidth(-1)
-            local changed, newName = ImGui.InputText("##presetName", popup.inputName, 0)
-            if changed then
-                popup.inputName = newName
-                popup.errorMsg = nil
-            end
-            ImGui.PopItemWidth()
-
-            if popup.errorMsg then
-                ImGui.PushStyleColor(ImGuiCol.Text, 0.85, 0.45, 0.4, 1.0)
-                ImGui.TextWrapped(popup.errorMsg)
-                ImGui.PopStyleColor(1)
-            end
-
-            ImGui.Spacing()
-
-            -- Show existing presets for reference
-            if #popup.presetList > 0 then
-                ImGui.PushStyleColor(ImGuiCol.Text, 0.5, 0.5, 0.55, 1.0)
-                ImGui.TextWrapped("Existing presets:")
-                ImGui.PopStyleColor(1)
-                for _, name in ipairs(popup.presetList) do
-                    ImGui.BulletText(name)
-                end
-                ImGui.Spacing()
-            end
-
-            ImGui.Separator()
-            ImGui.Spacing()
-
-            -- Buttons
-            ImGui.PushStyleColor(ImGuiCol.Button, 0.25, 0.45, 0.30, 0.95)
-            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.30, 0.52, 0.35, 1.0)
-            ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.22, 0.40, 0.27, 1.0)
-            if ImGui.Button("Save##savePreset", 120, 24) then
-                local name = popup.inputName:match("^%s*(.-)%s*$") -- trim
-                if name == "" then
-                    popup.errorMsg = "Please enter a name"
-                else
-                    local success, err = gui.savePreset(name)
-                    if success then
-                        popup.open = false
-                        popup.inputName = ""
-                        popup.errorMsg = nil
-                        API.printlua("Preset '" .. name .. "' saved", 0, false)
-                    else
-                        popup.errorMsg = err or "Failed to save preset"
-                    end
-                end
-            end
-            ImGui.PopStyleColor(3)
-
-            ImGui.SameLine()
-
-            ImGui.PushStyleColor(ImGuiCol.Button, 0.35, 0.35, 0.38, 0.9)
-            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.45, 0.45, 0.48, 1.0)
-            ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.5, 0.5, 0.52, 1.0)
-            if ImGui.Button("Cancel##cancelPreset", 120, 24) then
-                popup.open = false
-                popup.inputName = ""
-                popup.errorMsg = nil
-            end
-            ImGui.PopStyleColor(3)
-
-        else
-            -- Load mode: list of presets to select
-            if #popup.presetList == 0 then
-                ImGui.PushStyleColor(ImGuiCol.Text, 0.5, 0.5, 0.52, 1.0)
-                ImGui.TextUnformatted("No saved presets found.")
-                ImGui.PopStyleColor(1)
-            else
-                label("Select Preset")
-                ImGui.PushItemWidth(-1)
-                local changed, newIdx = ImGui.Combo("##presetSelect", popup.selectedIndex, popup.presetList, 10)
-                if changed then
-                    popup.selectedIndex = newIdx
-                    popup.errorMsg = nil
-                end
-                ImGui.PopItemWidth()
-            end
-
-            if popup.errorMsg then
-                ImGui.PushStyleColor(ImGuiCol.Text, 0.85, 0.45, 0.4, 1.0)
-                ImGui.TextWrapped(popup.errorMsg)
-                ImGui.PopStyleColor(1)
-            end
-
-            ImGui.Spacing()
-            ImGui.Separator()
-            ImGui.Spacing()
-
-            -- Buttons
-            if #popup.presetList > 0 then
-                ImGui.PushStyleColor(ImGuiCol.Button, 0.25, 0.45, 0.30, 0.95)
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.30, 0.52, 0.35, 1.0)
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.22, 0.40, 0.27, 1.0)
-                if ImGui.Button("Load##loadPreset", 76, 24) then
-                    local presetName = popup.presetList[popup.selectedIndex + 1]
-                    if presetName then
-                        local success = gui.loadPreset(presetName)
-                        if success then
-                            popup.open = false
-                            popup.errorMsg = nil
-                            API.printlua("Preset '" .. presetName .. "' loaded", 0, false)
-                        else
-                            popup.errorMsg = "Failed to load preset"
-                        end
-                    end
-                end
-                ImGui.PopStyleColor(3)
-
-                ImGui.SameLine()
-
-                ImGui.PushStyleColor(ImGuiCol.Button, 0.5, 0.32, 0.32, 0.9)
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.58, 0.38, 0.38, 1.0)
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.45, 0.28, 0.28, 1.0)
-                if ImGui.Button("Delete##deletePreset", 76, 24) then
-                    local presetName = popup.presetList[popup.selectedIndex + 1]
-                    if presetName then
-                        deletePreset(presetName)
-                        popup.presetList = listPresets()
-                        popup.selectedIndex = 0
-                        API.printlua("Preset '" .. presetName .. "' deleted", 0, false)
-                    end
-                end
-                ImGui.PopStyleColor(3)
-
-                ImGui.SameLine()
-            end
-
-            ImGui.PushStyleColor(ImGuiCol.Button, 0.35, 0.35, 0.38, 0.9)
-            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.45, 0.45, 0.48, 1.0)
-            ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.5, 0.5, 0.52, 1.0)
-            if ImGui.Button("Cancel##cancelLoad", 76, 24) then
-                popup.open = false
-                popup.errorMsg = nil
-            end
-            ImGui.PopStyleColor(3)
-        end
-    end
-    ImGui.End()
 end
 
 local function drawContent(data, gui)
