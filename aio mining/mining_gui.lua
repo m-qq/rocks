@@ -12,6 +12,21 @@ MiningGUI.warnings = {}
 MiningGUI.selectConfigTab = true
 MiningGUI.selectWarningsTab = false
 MiningGUI.selectInfoTab = false
+MiningGUI.uiMode = "presets"
+MiningGUI.presetSaveName = ""
+
+-- Module-level constants to avoid per-frame allocations
+local DEFAULT_GEM_COLOR = {0.6, 0.6, 0.6}
+local POTION_KEYS = {"none", "juju", "perfect"}
+local POTION_NAMES = {"None", "Juju Mining Potion", "Perfect Juju Mining Potion"}
+
+-- Warning label cache
+local cachedWarningLabel = nil
+local cachedWarningCount = -1
+
+-- Gem formatter cache
+local cachedGemFormatter = nil
+local cachedGemFormatterPgc = nil
 
 function MiningGUI.reset()
     MiningGUI.open = true
@@ -41,7 +56,6 @@ function MiningGUI.clearWarnings()
     MiningGUI.warnings = {}
 end
 
--- Build sorted key/name arrays for dropdowns
 local function buildSortedList(tbl, nameField)
     local keys, names = {}, {}
     for key in pairs(tbl) do
@@ -76,7 +90,6 @@ local oreKeys, oreNames = buildOreSortedList()
 local locationKeys, locationNames = buildSortedList(LOCATIONS, "name")
 local bankKeys, bankNames = buildSortedList(Banking.LOCATIONS, "name")
 
--- Precompute ore <-> location mappings
 local oreToLocations = {}
 local locationToOres = {}
 
@@ -93,7 +106,6 @@ for _, locKey in ipairs(locationKeys) do
     end
 end
 
--- Find 0-based index of a key in a sorted array, or -1 if not found
 local function findKeyIndex(keys, key)
     if not key then return -1 end
     for i, k in ipairs(keys) do
@@ -104,8 +116,8 @@ end
 
 local PRESETS_FILE = os.getenv("USERPROFILE") .. "\\MemoryError\\Lua_Scripts\\aio mining\\mining_presets.json"
 
--- In-memory cache of all presets (loaded once, updated on save/delete)
 local presetsCache = nil
+local presetNamesCache = nil
 
 local function loadAllPresets()
     if presetsCache then return presetsCache end
@@ -128,8 +140,6 @@ local function loadAllPresets()
     presetsCache = data
     return presetsCache
 end
-
-local presetNamesCache = nil
 
 local function invalidatePresetsCache()
     presetsCache = nil
@@ -184,7 +194,6 @@ local function savePresetToFile(presetName, cfg)
         BankPin = cfg.bankPin,
     }
 
-    -- Only save options valid for ore type
     if isGemRock then
         data.UseGemBag = cfg.useGemBag
         data.DropGems = cfg.dropGems
@@ -201,7 +210,7 @@ local function savePresetToFile(presetName, cfg)
     if not saveAllPresets() then
         return false, "Failed to save presets file"
     end
-    presetNamesCache = nil  -- invalidate names cache for new preset
+    presetNamesCache = nil
     return true
 end
 
@@ -217,7 +226,6 @@ local function deletePreset(presetName)
     invalidatePresetsCache()
 end
 
--- Returns filtered location indices (1-based into locationKeys) for a given ore
 local function getFilteredLocationIndices(oreKey)
     local result = {}
     local set = oreToLocations[oreKey]
@@ -230,7 +238,6 @@ local function getFilteredLocationIndices(oreKey)
     return result
 end
 
--- Config state with defaults
 MiningGUI.config = {
     oreIndex = 0,
     locationIndex = 0,
@@ -249,8 +256,6 @@ MiningGUI.config = {
     bankPin = "",
 }
 
--- Resolve a saved value to a 0-based index: supports string keys or legacy numeric indices
--- Returns 0 (default) if not found
 local function resolveIndex(keys, value)
     if type(value) == "string" then
         local idx = findKeyIndex(keys, value)
@@ -261,9 +266,7 @@ local function resolveIndex(keys, value)
     return 0
 end
 
--- Apply saved data to config
 local function applyConfigData(saved, c)
-    -- Core settings with validation
     local oreIdx = saved.Ore and findKeyIndex(oreKeys, saved.Ore) or -1
     local locIdx = saved.MiningLocation and findKeyIndex(locationKeys, saved.MiningLocation) or -1
 
@@ -285,7 +288,6 @@ local function applyConfigData(saved, c)
         and saved.SummoningRefreshLocation or "wars_retreat"
     c.bankPin = type(saved.BankPin) == "string" and saved.BankPin or ""
 
-    -- Reset all mode options to defaults first
     c.dropOres = false
     c.useOreBox = true
     c.chaseRockertunities = true
@@ -294,7 +296,6 @@ local function applyConfigData(saved, c)
     c.useGemBag = false
     c.useJuju = "none"
 
-    -- Apply ore-type-specific options from saved data
     local oreKey = oreKeys[c.oreIndex + 1]
     local oreDef = ORES[oreKey]
     local isGemRock = oreDef and oreDef.isGemRock
@@ -306,12 +307,11 @@ local function applyConfigData(saved, c)
         c.useGemBag = saved.UseGemBag == true
     elseif not isStackable then
         c.dropOres = saved.DropOres == true
-        c.useOreBox = saved.UseOreBox ~= false  -- default true
-        c.chaseRockertunities = saved.ChaseRockertunities ~= false  -- default true
+        c.useOreBox = saved.UseOreBox ~= false
+        c.chaseRockertunities = saved.ChaseRockertunities ~= false
         c.useJuju = type(saved.UseJuju) == "string" and saved.UseJuju or "none"
     end
 
-    -- Validate location has the selected ore
     local selectedLocKey = locationKeys[c.locationIndex + 1]
     if oreKey and selectedLocKey and oreToLocations[oreKey] then
         if not oreToLocations[oreKey][selectedLocKey] then
@@ -323,7 +323,6 @@ local function applyConfigData(saved, c)
     end
 end
 
--- Reset config to defaults
 function MiningGUI.resetConfig()
     local c = MiningGUI.config
     c.oreIndex = 0
@@ -341,7 +340,6 @@ function MiningGUI.resetConfig()
     c.useSummoning = "none"
     c.summoningRefreshLocation = "wars_retreat"
     c.bankPin = ""
-    -- Clear warnings and cached dropdown data
     MiningGUI.warnings = {}
     MiningGUI._filteredLocNames = nil
     MiningGUI._filteredLocMapping = nil
@@ -351,14 +349,11 @@ function MiningGUI.resetConfig()
     MiningGUI._refreshNames = nil
 end
 
--- Load a named preset into config
 function MiningGUI.loadPreset(presetName)
     local saved = loadPresetFromFile(presetName)
     if not saved then return false end
-    -- Clear warnings before loading new config
     MiningGUI.warnings = {}
     applyConfigData(saved, MiningGUI.config)
-    -- Clear cached dropdown data
     MiningGUI._filteredLocNames = nil
     MiningGUI._filteredLocMapping = nil
     MiningGUI._familiarKeys = nil
@@ -366,12 +361,10 @@ function MiningGUI.loadPreset(presetName)
     return true
 end
 
--- Save current config as a named preset
 function MiningGUI.savePreset(presetName)
     return savePresetToFile(presetName, MiningGUI.config)
 end
 
--- Convert GUI state to cfg table for the script
 function MiningGUI.getConfig()
     local c = MiningGUI.config
     local oreKey = oreKeys[c.oreIndex + 1]
@@ -392,7 +385,6 @@ function MiningGUI.getConfig()
         bankPin = c.bankPin,
     }
 
-    -- Ore-type-specific options
     if isGemRock then
         cfg.dropGems = c.dropGems
         cfg.cutAndDrop = c.cutAndDrop
@@ -422,69 +414,48 @@ function MiningGUI.getConfig()
     return cfg
 end
 
--- Color tables
 local ORE_COLORS = {
-    ["Copper"]          = {0.75, 0.55, 0.30},
-    ["Tin"]             = {0.70, 0.70, 0.70},
-    ["Iron"]            = {0.60, 0.20, 0.15},
-    ["Coal"]            = {0.45, 0.40, 0.38},
-    ["Mithril"]         = {0.30, 0.25, 0.60},
-    ["Adamantite"]      = {0.20, 0.55, 0.20},
-    ["Luminite"]        = {0.85, 0.85, 0.10},
-    ["Runite"]          = {0.20, 0.60, 0.60},
-    ["Orichalcite"]     = {0.60, 0.15, 0.10},
-    ["Drakolith"]       = {0.80, 0.70, 0.10},
-    ["Necrite"]         = {0.15, 0.40, 0.20},
-    ["Phasmatite"]      = {0.30, 0.75, 0.20},
-    ["Banite"]          = {0.30, 0.35, 0.45},
-    ["Light animica"]   = {0.40, 0.80, 0.90},
-    ["Dark animica"]    = {0.50, 0.30, 0.70},
-    ["Gold"]            = {0.90, 0.75, 0.15},
-    ["Silver"]          = {0.75, 0.75, 0.80},
-    ["Platinum"]        = {0.80, 0.80, 0.85},
-    ["Novite"]          = {0.45, 0.12, 0.50},
-    ["Bathus"]          = {0.25, 0.18, 0.12},
-    ["Marmaros"]        = {0.50, 0.45, 0.38},
-    ["Kratonium"]       = {0.35, 0.30, 0.15},
-    ["Fractite"]        = {0.12, 0.18, 0.12},
-    ["Zephyrium"]       = {0.15, 0.55, 0.40},
-    ["Argonite"]        = {0.30, 0.15, 0.55},
-    ["Katagon"]         = {0.12, 0.15, 0.45},
-    ["Gorgonite"]       = {0.55, 0.10, 0.12},
-    ["Promethium"]      = {0.50, 0.08, 0.10},
-    ["Uncommon gem"]    = {0.2, 0.6, 0.8},
-    ["Precious gem"]    = {0.75, 0.9, 1.0},
-    ["Crystal-flecked sandstone"] = {0.6, 0.3, 0.7},
-    ["Soft clay"]        = {0.65, 0.50, 0.30},
-    ["Seren stone"]     = {0.4, 0.85, 0.95},
+    ["Copper"] = {0.75, 0.55, 0.30}, ["Tin"] = {0.70, 0.70, 0.70},
+    ["Iron"] = {0.60, 0.20, 0.15}, ["Coal"] = {0.45, 0.40, 0.38},
+    ["Mithril"] = {0.30, 0.25, 0.60}, ["Adamantite"] = {0.20, 0.55, 0.20},
+    ["Luminite"] = {0.85, 0.85, 0.10}, ["Runite"] = {0.20, 0.60, 0.60},
+    ["Orichalcite"] = {0.60, 0.15, 0.10}, ["Drakolith"] = {0.80, 0.70, 0.10},
+    ["Necrite"] = {0.15, 0.40, 0.20}, ["Phasmatite"] = {0.30, 0.75, 0.20},
+    ["Banite"] = {0.30, 0.35, 0.45}, ["Light animica"] = {0.40, 0.80, 0.90},
+    ["Dark animica"] = {0.50, 0.30, 0.70}, ["Gold"] = {0.90, 0.75, 0.15},
+    ["Silver"] = {0.75, 0.75, 0.80}, ["Platinum"] = {0.80, 0.80, 0.85},
+    ["Uncommon gem"] = {0.2, 0.6, 0.8}, ["Precious gem"] = {0.75, 0.9, 1.0},
+    ["Crystal-flecked sandstone"] = {0.6, 0.3, 0.7}, ["Soft clay"] = {0.65, 0.50, 0.30},
+    ["Seren stone"] = {0.4, 0.85, 0.95},
 }
 
 local GEM_COLORS = {
-    Sapphire    = {0.2, 0.4, 0.9},
-    Emerald     = {0.1, 0.8, 0.3},
-    Ruby        = {0.9, 0.15, 0.15},
-    Diamond     = {0.75, 0.9, 1.0},
+    Sapphire = {0.2, 0.4, 0.9}, Emerald = {0.1, 0.8, 0.3},
+    Ruby = {0.9, 0.15, 0.15}, Diamond = {0.75, 0.9, 1.0},
     Dragonstone = {0.6, 0.3, 0.8},
 }
 
 local STATE_COLORS = {
-    Mining              = {0.3, 1.0, 0.4},
-    Banking             = {1.0, 0.8, 0.2},
-    Traveling           = {0.4, 0.8, 1.0},
-    Dropping            = {1.0, 0.5, 0.3},
-    ["Cutting Gems"]    = {0.8, 0.5, 1.0},
-    ["Filling Ore Box"] = {0.35, 0.6, 1.0},
+    Mining = {0.3, 1.0, 0.4}, Banking = {1.0, 0.8, 0.2},
+    Traveling = {0.4, 0.8, 1.0}, Dropping = {1.0, 0.5, 0.3},
+    ["Cutting Gems"] = {0.8, 0.5, 1.0}, ["Filling Ore Box"] = {0.35, 0.6, 1.0},
     ["Filling Gem Bag"] = {0.6, 0.3, 0.8},
 }
 
-local function row(label, value, lr, lg, lb, vr, vg, vb)
+local DEFAULT_LABEL_COLOR = {0.55, 0.55, 0.58}
+local DEFAULT_VALUE_COLOR = {0.78, 0.78, 0.8}
+local DIM_LABEL_COLOR = {0.5, 0.5, 0.55}
+
+local function row(label, value, labelColor, valueColor)
+    local lc = labelColor or DEFAULT_LABEL_COLOR
+    local vc = valueColor or DEFAULT_VALUE_COLOR
     ImGui.TableNextRow()
     ImGui.TableNextColumn()
-    ImGui.PushStyleColor(ImGuiCol.Text, lr or 0.55, lg or 0.55, lb or 0.58, 1.0)
+    ImGui.PushStyleColor(ImGuiCol.Text, lc[1], lc[2], lc[3], 1.0)
     ImGui.TextUnformatted(label)
     ImGui.PopStyleColor(1)
     ImGui.TableNextColumn()
-    ImGui.PushStyleColor(ImGuiCol.Text, vr or 0.78, vg or 0.78, vb or 0.8, 1.0)
+    ImGui.PushStyleColor(ImGuiCol.Text, vc[1], vc[2], vc[3], 1.0)
     ImGui.TextUnformatted(tostring(value))
     ImGui.PopStyleColor(1)
 end
@@ -507,7 +478,6 @@ local function disabledCheckbox(text)
     ImGui.Selectable("     " .. text .. "##disabled_" .. text, false, ImGuiSelectableFlags.Disabled)
     ImGui.PopStyleColor(1)
 end
-
 
 local function drawConfigSummary(cfg)
     if ImGui.BeginTable("##cfgsummary", 2) then
@@ -535,26 +505,22 @@ local function drawConfigSummary(cfg)
             else row("Mode", "Bank Ores") end
         end
         if cfg.threeTickMining then
-            row("3-tick", "Enabled", 0.5, 0.5, 0.55, 0.3, 1.0, 0.4)
+            row("3-tick", "Enabled", DIM_LABEL_COLOR, {0.3, 1.0, 0.4})
         end
         if cfg.useJuju == "juju" then
-            row("Potion", "Juju Mining Potion", 0.5, 0.5, 0.55, 0.6, 0.9, 0.3)
+            row("Potion", "Juju Mining Potion", DIM_LABEL_COLOR, {0.6, 0.9, 0.3})
         elseif cfg.useJuju == "perfect" then
-            row("Potion", "Perfect Juju Mining Potion", 0.5, 0.5, 0.55, 0.3, 0.9, 0.6)
+            row("Potion", "Perfect Juju Mining Potion", DIM_LABEL_COLOR, {0.3, 0.9, 0.6})
         end
         if cfg.useSummoning ~= "none" then
             local familiarDef = DATA.SUMMONING_FAMILIARS[cfg.useSummoning]
             if familiarDef then
-                row("Familiar", familiarDef.name, 0.5, 0.5, 0.55, 0.9, 0.5, 0.3)
+                row("Familiar", familiarDef.name, DIM_LABEL_COLOR, {0.9, 0.5, 0.3})
             end
         end
         ImGui.EndTable()
     end
 end
-
--- UI mode: "presets" shows preset list, "setup" shows configuration
-MiningGUI.uiMode = "presets"
-MiningGUI.presetSaveName = ""
 
 local function drawConfigTab(cfg, gui)
     if gui.started then
@@ -572,7 +538,6 @@ local function drawConfigTab(cfg, gui)
 
     local presetNames = listPresets()
 
-    -- Auto-switch to setup mode if no presets
     if #presetNames == 0 then
         gui.uiMode = "setup"
     end
@@ -629,7 +594,6 @@ local function drawConfigTab(cfg, gui)
 
         ImGui.Spacing()
 
-        -- New setup button
         ImGui.PushStyleColor(ImGuiCol.Button, 0.18, 0.25, 0.35, 0.95)
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.24, 0.32, 0.45, 1.0)
         ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.16, 0.22, 0.32, 1.0)
@@ -642,8 +606,6 @@ local function drawConfigTab(cfg, gui)
         return
     end
 
-    -- ============ SETUP MODE ============
-    -- Back button if we have presets
     if #presetNames > 0 then
         ImGui.PushStyleColor(ImGuiCol.Button, 0.22, 0.25, 0.30, 0.9)
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.30, 0.34, 0.40, 1.0)
@@ -657,7 +619,6 @@ local function drawConfigTab(cfg, gui)
 
     ImGui.PushItemWidth(-1)
 
-    -- Ore / Location / Bank dropdowns
     label("Ore")
     local oreChanged, newOreIdx = ImGui.Combo("##ore", cfg.oreIndex, oreNames, 10)
     if oreChanged then
@@ -696,7 +657,6 @@ local function drawConfigTab(cfg, gui)
             break
         end
     end
-    -- If current location not in filtered list, update to first valid location
     if not foundInFiltered and #filteredLocIndices > 0 then
         cfg.locationIndex = filteredLocIndices[1] - 1
     end
@@ -726,9 +686,7 @@ local function drawConfigTab(cfg, gui)
 
     ImGui.Separator()
 
-    -- Ore/Gem options
     if isStackable then
-        -- No options needed for stackable ores
     elseif isGemRock then
         if cfg.dropGems or cfg.cutAndDrop then
             disabledCheckbox("Use Gem Bag")
@@ -794,30 +752,27 @@ local function drawConfigTab(cfg, gui)
 
     ImGui.Separator()
 
-    -- Potion
     local selectedBankKey = bankKeys[cfg.bankIndex + 1]
     local isMetalBank = selectedBankKey and Banking.LOCATIONS[selectedBankKey] and Banking.LOCATIONS[selectedBankKey].metalBank
+    local isDepositOnly = isMetalBank or (selectedBankKey and Banking.LOCATIONS[selectedBankKey] and Banking.LOCATIONS[selectedBankKey].depositBox)
 
-    if not isGemRock and not isMetalBank then
-        local potionKeys = {"none", "juju", "perfect"}
-        local potionNames = {"None", "Juju Mining Potion", "Perfect Juju Mining Potion"}
+    if not isGemRock and not isDepositOnly then
         local currentPotionIdx = 0
-        for i, key in ipairs(potionKeys) do
+        for i, key in ipairs(POTION_KEYS) do
             if key == cfg.useJuju then
                 currentPotionIdx = i - 1
                 break
             end
         end
         label("Potion")
-        local potionChanged, newPotionIdx = ImGui.Combo("##potion", currentPotionIdx, potionNames, 10)
+        local potionChanged, newPotionIdx = ImGui.Combo("##potion", currentPotionIdx, POTION_NAMES, 10)
         if potionChanged then
-            cfg.useJuju = potionKeys[newPotionIdx + 1]
+            cfg.useJuju = POTION_KEYS[newPotionIdx + 1]
         end
     else
         cfg.useJuju = "none"
     end
 
-    -- Summoning
     if not gui._familiarKeys then
         local summoningLevel = API.XPLevelTable(API.GetSkillXP("SUMMONING"))
         gui._familiarKeys = {"none"}
@@ -894,7 +849,6 @@ local function drawConfigTab(cfg, gui)
     ImGui.Separator()
     ImGui.Spacing()
 
-    -- Save as preset option
     ImGui.PushStyleColor(ImGuiCol.Text, 0.6, 0.65, 0.7, 1.0)
     ImGui.TextUnformatted("Save as preset (optional):")
     ImGui.PopStyleColor(1)
@@ -908,16 +862,14 @@ local function drawConfigTab(cfg, gui)
 
     ImGui.Spacing()
 
-    -- Start button (saves preset if name provided)
     ImGui.PushStyleColor(ImGuiCol.Button, 0.25, 0.45, 0.30, 0.95)
     ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.30, 0.52, 0.35, 1.0)
     ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.22, 0.40, 0.27, 1.0)
 
     local buttonLabel = gui.presetSaveName ~= "" and "Save & Start" or "Start"
     if ImGui.Button(buttonLabel .. "##start", -1, 32) then
-        -- Save preset if name provided
         if gui.presetSaveName ~= "" then
-            local name = gui.presetSaveName:match("^%s*(.-)%s*$")  -- trim
+            local name = gui.presetSaveName:match("^%s*(.-)%s*$")
             if name ~= "" then
                 gui.savePreset(name)
             end
@@ -948,10 +900,8 @@ local function formatDuration(seconds)
 end
 
 local function drawInfoTab(data)
-    -- Progress bars section
     local hasProgressBars = false
 
-    -- Stamina bar
     if not data.noStamina then
         local drain = data.currentStamina or 0
         local max = data.maxStamina or 1
@@ -967,7 +917,6 @@ local function drawInfoTab(data)
         hasProgressBars = true
     end
 
-    -- Daily Limit bar
     if data.dailyLimit then
         if hasProgressBars then ImGui.Spacing() end
         local cur = data.dailyLimit.current or 0
@@ -983,7 +932,6 @@ local function drawInfoTab(data)
         hasProgressBars = true
     end
 
-    -- Ore Box bar
     if data.oreBox then
         if hasProgressBars then ImGui.Spacing() end
         local oreName = data.oreName or "Ore"
@@ -994,7 +942,6 @@ local function drawInfoTab(data)
         hasProgressBars = true
     end
 
-    -- Gem Bag bar
     if data.gemBag then
         if hasProgressBars then ImGui.Spacing() end
         local total = data.gemBag.total or 0
@@ -1007,14 +954,12 @@ local function drawInfoTab(data)
         hasProgressBars = true
     end
 
-    -- Separator after progress bars
     if hasProgressBars then
         ImGui.Spacing()
         ImGui.Separator()
         ImGui.Spacing()
     end
 
-    -- Info table
     if ImGui.BeginTable("##info", 2) then
         ImGui.TableSetupColumn("lbl", ImGuiTableColumnFlags.WidthStretch, 0.38)
         ImGui.TableSetupColumn("val", ImGuiTableColumnFlags.WidthStretch, 0.62)
@@ -1025,7 +970,6 @@ local function drawInfoTab(data)
             row("Mode", data.mode)
         end
 
-        -- Timers
         row("Anti-idle", Utils.formatTime(data.antiIdleTime or 0))
         if data.juju then
             row("Potion", Utils.formatTime(data.juju.timeUntilRefresh or 0))
@@ -1038,7 +982,6 @@ local function drawInfoTab(data)
         ImGui.EndTable()
     end
 
-    -- Gem bag details (collapsible or only if gems present)
     if data.gemBag and data.gemBag.total and data.gemBag.total > 0 then
         ImGui.Spacing()
         if ImGui.CollapsingHeader("Gem Bag") then
@@ -1046,10 +989,15 @@ local function drawInfoTab(data)
                 ImGui.TableSetupColumn("gem", ImGuiTableColumnFlags.WidthStretch, 0.38)
                 ImGui.TableSetupColumn("cnt", ImGuiTableColumnFlags.WidthStretch, 0.62)
                 local pgc = data.gemBag.perGemCapacity
-                local fmt = pgc and function(v) return v .. " / " .. pgc end or tostring
+                -- Cache formatter to avoid creating closure every frame
+                if pgc ~= cachedGemFormatterPgc then
+                    cachedGemFormatterPgc = pgc
+                    cachedGemFormatter = pgc and function(v) return v .. " / " .. pgc end or tostring
+                end
+                local fmt = cachedGemFormatter
                 local function gemRow(name, value)
-                    local c = GEM_COLORS[name] or {0.6, 0.6, 0.6}
-                    row(name, fmt(value), c[1], c[2], c[3])
+                    local c = GEM_COLORS[name] or DEFAULT_GEM_COLOR
+                    row(name, fmt(value), c)
                 end
                 if (data.gemBag.sapphire or 0) > 0 then gemRow("Sapphire", data.gemBag.sapphire) end
                 if (data.gemBag.emerald or 0) > 0 then gemRow("Emerald", data.gemBag.emerald) end
@@ -1066,7 +1014,6 @@ local function drawMetricsTab(data)
     local m = data.metrics
     if not m then return end
 
-    -- Mining XP bar
     if m.maxLevel then
         progressBar(1.0, 18, string.format("Mining %d  |  %s/hr", m.currentLevel, formatNumber(m.xpPerHour)), 0.45, 0.6, 0.45)
     else
@@ -1075,7 +1022,6 @@ local function drawMetricsTab(data)
         progressBar(m.levelProgress, 18, label, 0.45, 0.55, 0.65)
     end
 
-    -- Crafting XP bar (if applicable)
     if m.crafting then
         ImGui.Spacing()
         local c = m.crafting
@@ -1117,7 +1063,6 @@ local function drawWarningsTab(gui)
 end
 
 local function drawContent(data, gui)
-
     if ImGui.BeginTabBar("##maintabs", 0) then
         if not gui.started then
             local configFlags = gui.selectConfigTab and ImGuiTabItemFlags.SetSelected or 0
@@ -1147,9 +1092,13 @@ local function drawContent(data, gui)
         end
 
         if #gui.warnings > 0 then
-            local warningLabel = "Warnings (" .. #gui.warnings .. ")###warnings"
+            -- Cache warning label to avoid string concat every frame
+            if #gui.warnings ~= cachedWarningCount then
+                cachedWarningCount = #gui.warnings
+                cachedWarningLabel = "Warnings (" .. cachedWarningCount .. ")###warnings"
+            end
             local warnFlags = gui.selectWarningsTab and ImGuiTabItemFlags.SetSelected or 0
-            local warnSelected = ImGui.BeginTabItem(warningLabel, nil, warnFlags)
+            local warnSelected = ImGui.BeginTabItem(cachedWarningLabel, nil, warnFlags)
             if warnSelected then gui.selectWarningsTab = false end
             if warnSelected then
                 ImGui.Spacing()
@@ -1160,7 +1109,6 @@ local function drawContent(data, gui)
 
         ImGui.EndTabBar()
     end
-
 end
 
 function MiningGUI.draw(data)

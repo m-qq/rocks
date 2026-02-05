@@ -36,6 +36,7 @@ local MINING_LOCATIONS = {
         name = "Al Kharid",
         routeOptions = {
             { condition = { dungeoneeringCape = true }, route = Routes.TO_AL_KHARID_MINE_VIA_DUNGEONEERING_CAPE },
+            { condition = { resourceLocator = "silver" }, route = Routes.TO_AL_KHARID_MINE_VIA_LOCATOR },
             { condition = { archJournal = true }, route = Routes.TO_AL_KHARID_MINE_VIA_ARCH_JOURNAL },
             { route = Routes.TO_AL_KHARID_MINE }
         },
@@ -50,6 +51,7 @@ local MINING_LOCATIONS = {
         name = "Al Kharid Gem Rocks",
         routeOptions = {
             { condition = { dungeoneeringCape = true }, route = Routes.TO_AL_KHARID_GEM_ROCKS_VIA_DUNGEONEERING_CAPE },
+            { condition = { resourceLocator = "silver" }, route = Routes.TO_AL_KHARID_GEM_ROCKS_VIA_LOCATOR },
             { condition = { archJournal = true }, route = Routes.TO_AL_KHARID_GEM_ROCKS_VIA_ARCH_JOURNAL },
             { route = Routes.TO_AL_KHARID_GEM_ROCKS }
         },
@@ -63,6 +65,7 @@ local MINING_LOCATIONS = {
         name = "Al Kharid Resource Dungeon",
         routeOptions = {
             { condition = { dungeoneeringCape = true }, route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON_VIA_DUNGEONEERING_CAPE },
+            { condition = { resourceLocator = "silver" }, route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON_VIA_LOCATOR },
             { condition = { archJournal = true }, route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON_VIA_ARCH_JOURNAL },
             { route = Routes.TO_AL_KHARID_RESOURCE_DUNGEON }
         },
@@ -77,7 +80,10 @@ local MINING_LOCATIONS = {
 
     varrock_sw = {
         name = "Varrock South-West",
-        route = Routes.TO_VARROCK_SW_MINE,
+        routeOptions = {
+            { condition = { resourceLocator = "iron" }, route = Routes.TO_VARROCK_SW_MINE_VIA_LOCATOR },
+            { route = Routes.TO_VARROCK_SW_MINE }
+        },
         ores = {"copper", "tin", "iron", "mithril"},
         oreCoords = {
             copper = {x = 3177, y = 3366},
@@ -91,6 +97,7 @@ local MINING_LOCATIONS = {
         name = "Varrock South-East",
         skip_if = { nearCoord = {x = 3287, y = 3365} },
         routeOptions = {
+            { condition = { resourceLocator = "mithril" }, route = Routes.TO_VARROCK_SE_MINE_VIA_LOCATOR },
             { condition = { archJournal = true }, route = Routes.TO_VARROCK_SE_MINE_VIA_ARCH_JOURNAL },
             { route = Routes.TO_VARROCK_SE_MINE }
         },
@@ -105,7 +112,10 @@ local MINING_LOCATIONS = {
 
     lumbridge_se = {
         name = "Lumbridge South-East",
-        route = Routes.TO_LUMBRIDGE_SE_MINE,
+        routeOptions = {
+            { condition = { resourceLocator = "copper" }, route = Routes.TO_LUMBRIDGE_SE_MINE_VIA_LOCATOR },
+            { route = Routes.TO_LUMBRIDGE_SE_MINE }
+        },
         ores = {"copper", "tin"},
         oreCoords = {
             copper = {x = 3231, y = 3149},
@@ -115,7 +125,10 @@ local MINING_LOCATIONS = {
 
     lumbridge_sw = {
         name = "Lumbridge South-West",
-        route = Routes.TO_LUMBRIDGE_SW_MINE,
+        routeOptions = {
+            { condition = { resourceLocator = "iron" }, route = Routes.TO_LUMBRIDGE_SW_MINE_VIA_LOCATOR },
+            { route = Routes.TO_LUMBRIDGE_SW_MINE }
+        },
         ores = {"iron", "coal"},
         oreCoords = {
             iron = {x = 3145, y = 3147},
@@ -125,7 +138,10 @@ local MINING_LOCATIONS = {
 
     rimmington = {
         name = "Rimmington",
-        route = Routes.TO_RIMMINGTON_MINE,
+        routeOptions = {
+            { condition = { resourceLocator = "gold" }, route = Routes.TO_RIMMINGTON_MINE_VIA_LOCATOR },
+            { route = Routes.TO_RIMMINGTON_MINE }
+        },
         ores = {"copper", "tin", "adamant", "gold"},
         oreCoords = {
             copper = {x = 2969, y = 3234},
@@ -137,7 +153,10 @@ local MINING_LOCATIONS = {
 
     karamja_volcano = {
         name = "Karamja Volcano",
-        route = Routes.TO_KARAMJA_VOLCANO_MINE,
+        routeOptions = {
+            { condition = { resourceLocator = "runite" }, route = Routes.TO_KARAMJA_VOLCANO_MINE_VIA_LOCATOR },
+            { route = Routes.TO_KARAMJA_VOLCANO_MINE }
+        },
         ores = {"runite"},
         oreCoords = {
             runite = {x = 2860, y = 9577}
@@ -158,6 +177,7 @@ local MINING_LOCATIONS = {
     dwarven_mine = {
         name = "Dwarven Mine",
         routeOptions = {
+            { condition = { nearCoord = {x = 1042, y = 4578} }, route = Routes.TO_DWARVEN_MINE_FROM_RD },
             { condition = { dungeoneeringCape = true }, route = Routes.TO_DWARVEN_MINE_VIA_DUNGEONEERING_CAPE },
             { condition = { nearCoord = {x = 3043, y = 3340} }, route = Routes.TO_DWARVEN_MINE_FROM_ARTISANS_GUILD_FURNACE },
             { condition = { nearCoord = {x = 3061, y = 3340} }, route = Routes.TO_DWARVEN_MINE_FROM_ARTISANS_GUILD_BANK },
@@ -181,6 +201,7 @@ local MINING_LOCATIONS = {
     dwarven_resource_dungeon = {
         name = "Dwarven Resource Dungeon",
         routeOptions = {
+            { condition = { nearCoord = {x = 1042, y = 4578} }, route = Routes.TO_DM_RD_DEPOSIT_BOX },
             { condition = { dungeoneeringCape = true }, route = Routes.TO_DWARVEN_RESOURCE_DUNGEON_VIA_DUNGEONEERING_CAPE },
             { route = Routes.TO_DWARVEN_RESOURCE_DUNGEON }
         },

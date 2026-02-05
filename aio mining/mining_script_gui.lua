@@ -2,16 +2,22 @@ local API = require("api")
 local idleHandler = require("aio mining/idle_handler")
 local ORES = require("aio mining/mining_ores")
 local DATA = require("aio mining/mining_data")
+local LOCATIONS = require("aio mining/mining_locations")
 local Utils = require("aio mining/mining_utils")
 local OreBox = require("aio mining/mining_orebox")
 local Routes = require("aio mining/mining_routes")
+local Teleports = require("aio mining/mining_teleports")
 local Banking = require("aio mining/mining_banking")
 local MiningGUI = require("aio mining/mining_gui")
+
+local containerCheckBuf = {0}
 
 idleHandler.init()
 
 API.SetDrawLogs(false)
 API.SetDrawTrackedSkills(false)
+API.Write_fake_mouse_do(false)
+API.TurnOffMrHasselhoff(true)
 
 ClearRender()
 MiningGUI.reset()
@@ -38,6 +44,10 @@ if not API.Read_LoopyLoop() then
     return
 end
 
+Banking.resetCache()
+Utils.resetTimerState()
+Routes.resetState()
+
 local cfg = MiningGUI.getConfig()
 
 if cfg.useGemBag then
@@ -58,16 +68,21 @@ if selectedOreConfig and selectedOreConfig.isStackable then
     cfg.dropOres = false
     cfg.chaseRockertunities = false
     cfg.threeTickMining = false
+    cfg.useJuju = "none"
 elseif selectedOreConfig and not selectedOreConfig.isGemRock then
     cfg.useGemBag = false
     cfg.cutAndDrop = false
     cfg.dropGems = false
-    if selectedOreConfig.noOreBox then cfg.useOreBox = false end
+    if selectedOreConfig.noOreBox then
+        cfg.useOreBox = false
+        cfg.useJuju = "none"
+    end
     if selectedOreConfig.noRockertunities then cfg.chaseRockertunities = false end
 elseif selectedOreConfig and selectedOreConfig.isGemRock then
     cfg.useOreBox = false
     cfg.chaseRockertunities = false
     cfg.dropOres = false
+    cfg.useJuju = "none"
 end
 if cfg.dropOres then
     cfg.useOreBox = false
@@ -92,9 +107,6 @@ local state = {
     currentState = "Idle",
 }
 
-API.Write_fake_mouse_do(false)
-API.TurnOffMrHasselhoff(false)
-
 if cfg.useOreBox then
     state.playerOreBox = OreBox.find()
     if state.playerOreBox then
@@ -113,6 +125,26 @@ if cfg.useGemBag then
     else
         API.printlua("No gem bag found in inventory - continuing without", 4, false)
         cfg.useGemBag = false
+    end
+end
+
+local locatorOre = Utils.getLocatorOreForLocation(cfg.location)
+if locatorOre then
+    local locatorDef, locatorEquipped = Teleports.scanForLocator(locatorOre)
+    if locatorDef then
+        local charges = Teleports.getLocatorCharges(locatorDef, locatorEquipped)
+        if charges > 0 then
+            Routes.useLocator = true
+            API.printlua("Found " .. locatorDef.name .. " with " .. math.floor(charges) .. " charges - using locator route", 0, false)
+        else
+            local energyInInventory = Inventory:GetItemAmount(locatorDef.energyId)
+            if energyInInventory > 0 then
+                Routes.useLocator = true
+                API.printlua("Found " .. locatorDef.name .. " with 0 charges but " .. energyInInventory .. " energy - will recharge", 0, false)
+            else
+                API.printlua("Found " .. locatorDef.name .. " but no charges or energy - using fallback route", 4, false)
+            end
+        end
     end
 end
 
@@ -312,14 +344,24 @@ local success, err = pcall(function()
         end
 
         if state.familiarDef and Utils.needsFamiliarRefresh(state.familiarDef) then
-            if Utils.getSummoningPoints() >= state.familiarDef.pointsCost and API.Container_Check_Items(93, {state.familiarDef.pouchId}) then
+            containerCheckBuf[1] = state.familiarDef.pouchId
+            local hasPouch = API.Container_Check_Items(93, containerCheckBuf)
+            if Utils.getSummoningPoints() >= state.familiarDef.pointsCost and hasPouch then
                 if not Utils.summonFamiliar(state.familiarDef) and not state.familiarWarned then
                     state.familiarWarned = true
                     MiningGUI.addWarning("Failed to summon " .. state.familiarDef.name)
                 end
             elseif state.summoningRefreshLocation then
                 state.currentState = "Refreshing Summoning"
-                local refreshOk, hasMorePouches = Utils.refreshSummoningPoints(loc, cfg.ore, state.familiarDef, state.playerOreBox, ore, state.gemBagId, state.summoningRefreshLocation)
+                local refreshOk, hasMorePouches = Utils.refreshSummoningPoints({
+                    miningLocation = loc,
+                    selectedOre = cfg.ore,
+                    familiarDef = state.familiarDef,
+                    oreBoxId = state.playerOreBox,
+                    oreConfig = ore,
+                    gemBagId = state.gemBagId,
+                    refreshLocation = state.summoningRefreshLocation,
+                })
                 if refreshOk then
                     state.familiarWarned = false
                     state.hasInteracted = false
@@ -343,12 +385,26 @@ local success, err = pcall(function()
         elseif cfg.dropOres and Inventory:IsFull() then
             state.currentState = "Dropping"
             Utils.dropAllOres(ore, state)
+        elseif Utils.tryRechargeLocatorOnSite(cfg.location) then
+            state.currentState = "Recharging Locator"
+            API.RandomSleep2(300, 100, 100)
         elseif Utils.needsBanking(cfg, ore, state) then
             state.currentState = "Banking"
             state.hasInteracted = false
             Banking.jujuWarning = nil
             Banking.familiarWarning = nil
-            if not Banking.performBanking(bank, loc, state.playerOreBox, ore, cfg.bankPin, cfg.ore, cfg.location, state.gemBagId, state.jujuDef, state.familiarDef) then
+            if not Banking.performBanking({
+                bankLocation = bank,
+                miningLocation = loc,
+                oreBoxId = state.playerOreBox,
+                oreConfig = ore,
+                bankPin = cfg.bankPin,
+                selectedOre = cfg.ore,
+                miningLocationKey = cfg.location,
+                gemBagId = state.gemBagId,
+                jujuDef = state.jujuDef,
+                familiarDef = state.familiarDef,
+            }) then
                 break
             end
             if Banking.jujuWarning then

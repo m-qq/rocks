@@ -6,11 +6,11 @@ local Routes = require("aio mining/mining_routes")
 
 local Banking = {}
 
--- Set during startup if the configured bank is a metal bank.
--- Used by performBanking to detour for withdrawals.
+-- Reusable buffer for interface scans
+local interfaceScanBuf = {}
+
 Banking.fallbackBank = nil
 
---- Close the bank window if open. Press Escape, wait for close, short sleep.
 function Banking.closeBank()
     if API.BankOpen2() then
         API.KeyboardPress2(0x1B, 60, 100)
@@ -23,11 +23,10 @@ end
 
 local BANK_PIN_INTERFACE = { { 13,0,-1,0 }, { 13,25,-1,0 }, { 13,25,14,0 } }
 
--- Pre-built static keep items set (never changes at runtime)
 local staticKeepItems = {
     [DATA.ARCH_JOURNAL_ID] = true,
     [DATA.RING_OF_KINSHIP_ID] = true,
-    [39018] = true  -- Senntisten scroll (unbankable)
+    [39018] = true
 }
 for _, id in ipairs(DATA.SLAYER_CAPE_IDS) do
     staticKeepItems[id] = true
@@ -41,28 +40,34 @@ end
 for id in pairs(DATA.ALL_SUMMONING_POUCH_IDS) do
     staticKeepItems[id] = true
 end
+for id in pairs(DATA.ALL_LOCATOR_IDS) do
+    staticKeepItems[id] = true
+end
+for id in pairs(DATA.ALL_ENERGY_IDS) do
+    staticKeepItems[id] = true
+end
 
--- Reusable single-element table for Container_Check_Items calls
 local containerCheckBuf = {0}
 
--- Cached bank item stacks: { [itemId] = stackCount }
--- Populated once on first bank open, decremented on withdraw, never re-queried
 local bankCache = {}
 local bankCachePopulated = false
 
 local function populateBankCache()
     if bankCachePopulated then return end
-    -- Query all juju potion IDs
     for id in pairs(DATA.ALL_JUJU_IDS) do
         local bankItem = API.Container_Get_s(95, id)
         bankCache[id] = bankItem and bankItem.item_stack or 0
     end
-    -- Query all summoning pouch IDs
     for id in pairs(DATA.ALL_SUMMONING_POUCH_IDS) do
         local bankItem = API.Container_Get_s(95, id)
         bankCache[id] = bankItem and bankItem.item_stack or 0
     end
     bankCachePopulated = true
+end
+
+function Banking.resetCache()
+    bankCache = {}
+    bankCachePopulated = false
 end
 
 local function bankCacheGet(itemId)
@@ -80,28 +85,19 @@ Banking.LOCATIONS = {
         name = "Archaeology Campus",
         skip_if = { nearCoord = {x = 3363, y = 3397} },
         route = Routes.TO_ARCHAEOLOGY_CAMPUS_BANK,
-        bank = {
-            object = "Bank chest",
-            action = "Use"
-        }
+        bank = { object = "Bank chest", action = "Use" }
     },
     player_owned_farm = {
         name = "Player Owned Farm",
         skip_if = { nearCoord = {x = 2649, y = 3344} },
         route = Routes.TO_POF_BANK,
-        bank = {
-            object = "Bank chest",
-            action = "Use"
-        }
+        bank = { object = "Bank chest", action = "Use" }
     },
     falador_west = {
         name = "Falador West",
         skip_if = { nearCoord = {x = 2947, y = 3367} },
         route = Routes.TO_FALADOR_WEST_BANK,
-        bank = {
-            object = "Bank booth",
-            action = "Bank"
-        }
+        bank = { object = "Bank booth", action = "Bank" }
     },
     falador_east = {
         name = "Falador East",
@@ -111,28 +107,19 @@ Banking.LOCATIONS = {
             { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_FALADOR_EAST_BANK_FROM_DM },
             { route = Routes.TO_FALADOR_EAST_BANK }
         },
-        bank = {
-            object = "Bank booth",
-            action = "Bank"
-        }
+        bank = { object = "Bank booth", action = "Bank" }
     },
     edgeville = {
         name = "Edgeville",
         skip_if = { nearCoord = {x = 3095, y = 3493} },
         route = Routes.TO_EDGEVILLE_BANK,
-        bank = {
-            object = "Counter",
-            action = "Bank"
-        }
+        bank = { object = "Counter", action = "Bank" }
     },
     memorial_to_guthix = {
         name = "Memorial to Guthix",
         skip_if = { nearCoord = {x = 2280, y = 3559} },
         route = Routes.TO_MEMORIAL_TO_GUTHIX_BANK,
-        bank = {
-            object = "Bank chest",
-            action = "Use"
-        }
+        bank = { object = "Bank chest", action = "Use" }
     },
     wilderness_pirates_hideout_anvil = {
         name = "Wilderness Pirates Hideout Anvil",
@@ -141,28 +128,19 @@ Banking.LOCATIONS = {
             { condition = { slayerCape = true }, route = Routes.TO_WILDERNESS_PIRATES_HIDEOUT_VIA_SLAYER_CAPE },
             { route = Routes.TO_WILDERNESS_PIRATES_HIDEOUT }
         },
-        metalBank = {
-            object = "Anvil",
-            action = "Deposit-all (into metal bank)"
-        }
+        metalBank = { object = "Anvil", action = "Deposit-all (into metal bank)" }
     },
     fort_forinthry = {
         name = "Fort Forinthry",
         skip_if = { nearCoord = {x = 3303, y = 3544} },
         route = Routes.TO_FORT_FORINTHRY_BANK,
-        bank = {
-            npc = "Copperpot",
-            action = "Bank"
-        }
+        bank = { npc = "Copperpot", action = "Bank" }
     },
     fort_forinthry_furnace = {
         name = "Fort Forinthry Furnace",
         skip_if = { nearCoord = {x = 3280, y = 3558} },
         route = Routes.TO_FORT_FORINTHRY_FURNACE,
-        metalBank = {
-            object = "Furnace",
-            action = "Deposit-all (into metal bank)"
-        }
+        metalBank = { object = "Furnace", action = "Deposit-all (into metal bank)" }
     },
     artisans_guild_furnace = {
         name = "Artisans Guild Furnace",
@@ -174,10 +152,7 @@ Banking.LOCATIONS = {
             { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_ARTISANS_GUILD_FURNACE_FROM_DM },
             { route = Routes.TO_ARTISANS_GUILD_FURNACE }
         },
-        metalBank = {
-            object = "Furnace",
-            action = "Deposit-all (into metal bank)"
-        }
+        metalBank = { object = "Furnace", action = "Deposit-all (into metal bank)" }
     },
     artisans_guild_bank = {
         name = "Artisans Guild Bank",
@@ -189,91 +164,72 @@ Banking.LOCATIONS = {
             { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_ARTISANS_GUILD_BANK_FROM_DM },
             { route = Routes.TO_ARTISANS_GUILD_BANK }
         },
-        bank = {
-            object = "Bank chest",
-            action = "Use"
-        }
+        bank = { object = "Bank chest", action = "Use" }
     },
     ithell = {
         name = "Ithell Bank Chest",
         skip_if = { nearCoord = {x = 2154, y = 3340} },
         route = Routes.TO_ITHELL_BANK,
-        bank = {
-            object = "Bank chest",
-            action = "Use"
-        }
+        bank = { object = "Bank chest", action = "Use" }
     },
     prifddinas = {
         name = "Prifddinas",
         skip_if = { nearCoord = {x = 2208, y = 3360} },
         route = Routes.TO_PRIFDDINAS_BANK,
-        bank = {
-            npc = "Banker",
-            action = "Bank"
-        }
+        bank = { npc = "Banker", action = "Bank" }
     },
     deep_sea_fishing_hub = {
         name = "Deep Sea Fishing Hub",
         skip_if = { nearCoord = {x = 2135, y = 7107} },
         route = Routes.TO_DEEP_SEA_FISHING_HUB_BANK,
-        bank = {
-            object = "Rowboat",
-            action = "Bank"
-        }
+        bank = { object = "Rowboat", action = "Bank" }
     },
     burthorpe = {
         name = "Burthorpe",
         skip_if = { nearCoord = {x = 2888, y = 3536} },
         route = Routes.TO_BURTHORPE_BANK,
-        bank = {
-            object = "Bank chest",
-            action = "Use"
-        }
+        bank = { object = "Bank chest", action = "Use" }
     },
     daemonheim_banker = {
         name = "Daemonheim Banker",
         skip_if = { nearCoord = {x = 3448, y = 3719} },
         route = Routes.TO_DAEMONHEIM_BANK,
-        bank = {
-            npc = "Fremennik banker",
-            action = "Bank"
-        }
+        bank = { npc = "Fremennik banker", action = "Bank" }
     },
     lumbridge_furnace = {
         name = "Lumbridge Furnace",
         skip_if = { nearCoord = {x = 3227, y = 3254} },
         route = Routes.TO_LUMBRIDGE_FURNACE,
-        metalBank = {
-            object = "Furnace",
-            action = "Deposit-all (into metal bank)"
-        }
+        metalBank = { object = "Furnace", action = "Deposit-all (into metal bank)" }
     },
     lumbridge_market = {
         name = "Lumbridge Market",
         skip_if = { nearCoord = {x = 3213, y = 3257} },
         route = Routes.TO_LUMBRIDGE_MARKET_BANK,
-        bank = {
-            object = "Bank chest",
-            action = "Use"
-        }
+        bank = { object = "Bank chest", action = "Use" }
     },
     max_guild = {
         name = "Max Guild",
         skip_if = { nearCoord = {x = 2276, y = 3313} },
         route = Routes.TO_MAX_GUILD_BANK,
-        bank = {
-            npc = "Banker",
-            action = "Bank"
-        }
+        bank = { npc = "Banker", action = "Bank" }
     },
     wars_retreat = {
         name = "War's Retreat",
         skip_if = { nearCoord = {x = 3294, y = 10127} },
         route = Routes.TO_WARS_RETREAT_BANK,
-        bank = {
-            object = "Bank chest",
-            action = "Use"
-        }
+        bank = { object = "Bank chest", action = "Use" }
+    },
+    dwarven_resource_dungeon_deposit_box = {
+        name = "Dwarven RD Deposit Box",
+        skip_if = { nearCoord = {x = 1042, y = 4578, maxDistance = 10} },
+        routeOptions = {
+            { condition = { fromLocation = {"dwarven_resource_dungeon"} }, route = Routes.TO_DM_RD_DEPOSIT_BOX },
+            { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 153, z = 12185} }, route = Routes.TO_DM_RD_DEPOSIT_BOX_FROM_DM_COAL },
+            { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_DM_RD_DEPOSIT_BOX_FROM_DM },
+            { route = Routes.TO_DWARVEN_RESOURCE_DUNGEON }
+        },
+        depositBox = { object = "Bank deposit box", action = "Deposit-All", id = 25937 }
     }
 }
 
@@ -281,8 +237,6 @@ local function depositItem(itemId, itemName)
     local count = Inventory:GetItemAmount(itemId)
     if count == 0 then return true end
 
-    -- For single items, action is always 2
-    -- For multiple items, action depends on varbit 45189 (7 if vb==7, else use action 7 for deposit-all)
     local action
     if count == 1 then
         action = 2
@@ -298,8 +252,8 @@ local function depositItem(itemId, itemName)
 end
 
 local function isBankPinOpen()
-    local result = API.ScanForInterfaceTest2Get(false, BANK_PIN_INTERFACE)
-    return #result > 0 and result[1].textids == "Bank of Gielinor"
+    interfaceScanBuf = API.ScanForInterfaceTest2Get(false, BANK_PIN_INTERFACE)
+    return #interfaceScanBuf > 0 and interfaceScanBuf[1].textids == "Bank of Gielinor"
 end
 
 function Banking.openBank(bankLocation, bankPin)
@@ -312,7 +266,6 @@ function Banking.openBank(bankLocation, bankPin)
     local bank = bankLocation.bank
     local range = bank.range or 40
 
-    -- Wait for bank object/NPC to load before interacting
     local bankName = bank.npc or bank.object
     local searchTypes = bank.npc and {1} or {0, 12}
     if not Utils.waitOrTerminate(function()
@@ -439,6 +392,20 @@ function Banking.depositToMetalBank(metalBankConfig, oreBoxId, oreConfig)
     end, 10, 100, "Failed to deposit to metal bank")
 end
 
+function Banking.depositToDepositBox(depositBoxConfig)
+    if not depositBoxConfig then
+        API.printlua("No deposit box config provided", 4, false)
+        return false
+    end
+
+    API.printlua("Depositing to deposit box...", 5, false)
+    Interact:Object(depositBoxConfig.object, depositBoxConfig.action, 25)
+
+    return Utils.waitOrTerminate(function()
+        return Inventory:IsEmpty() or Inventory:FreeSpaces() >= 26
+    end, 10, 100, "Failed to deposit to deposit box")
+end
+
 function Banking.findJujuInInventory(potionDef)
     for _, potion in ipairs(potionDef.potions) do
         containerCheckBuf[1] = potion.id
@@ -539,7 +506,45 @@ function Banking.getBankItemCount(itemId)
     return bankCacheGet(itemId)
 end
 
-function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfig, bankPin, selectedOre, miningLocationKey, gemBagId, jujuDef, familiarDef)
+function Banking.withdrawEnergy(locatorDef)
+    if not API.BankOpen2() then return 0 end
+    if not locatorDef then return 0 end
+
+    local bankEnergy = API.Container_Get_s(95, locatorDef.energyId)
+    local available = bankEnergy and bankEnergy.item_stack or 0
+
+    if available <= 0 then
+        return 0
+    end
+
+    API.printlua("Withdrawing " .. available .. " energy for locator recharge...", 0, false)
+
+    if not disableNotedMode() then return 0 end
+
+    local withdrawAction = API.GetVarbitValue(45189) == 7 and 1 or 7
+    API.DoAction_Bank(locatorDef.energyId, withdrawAction, API.OFF_ACT_GeneralInterface_route)
+
+    if not Utils.waitOrTerminate(function()
+        return Inventory:Contains(locatorDef.energyId)
+    end, 5, 100, "Failed to withdraw energy") then
+        return 0
+    end
+
+    return Inventory:GetItemAmount(locatorDef.energyId)
+end
+
+function Banking.performBanking(config)
+    local bankLocation = config.bankLocation
+    local miningLocation = config.miningLocation
+    local oreBoxId = config.oreBoxId
+    local oreConfig = config.oreConfig
+    local bankPin = config.bankPin
+    local selectedOre = config.selectedOre
+    local miningLocationKey = config.miningLocationKey
+    local gemBagId = config.gemBagId
+    local jujuDef = config.jujuDef
+    local familiarDef = config.familiarDef
+
     if not bankLocation then
         API.printlua("No banking location provided", 4, false)
         return false
@@ -552,6 +557,11 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
     if bankLocation.metalBank then
         if not Banking.depositToMetalBank(bankLocation.metalBank, oreBoxId, oreConfig) then
             API.printlua("Failed to deposit to metal bank", 4, false)
+            return false
+        end
+    elseif bankLocation.depositBox then
+        if not Banking.depositToDepositBox(bankLocation.depositBox) then
+            API.printlua("Failed to deposit to deposit box", 4, false)
             return false
         end
     else
@@ -580,6 +590,59 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
                 end
             end
         end
+
+        local locatorDef = nil
+        local locatorEquipped = false
+        local withdrawnEnergy = 0
+        local needsRecharge = false
+        if Routes.useLocator and miningLocationKey then
+            local Teleports = require("aio mining/mining_teleports")
+            local locatorTargetOre = Utils.getLocatorOreForLocation(miningLocationKey)
+            if locatorTargetOre then
+                locatorDef, locatorEquipped = Teleports.scanForLocator(locatorTargetOre)
+                if locatorDef then
+                    local charges = Teleports.getLocatorCharges(locatorDef, locatorEquipped)
+                    local energyInInventory = Inventory:GetItemAmount(locatorDef.energyId)
+                    needsRecharge = charges <= 0
+
+                    API.printlua("Locator check: charges=" .. math.floor(charges) .. ", energyInInv=" .. energyInInventory .. ", costPerCharge=" .. locatorDef.energyPerCharge, 0, false)
+
+                    -- Proactively withdraw energy if we don't have enough for 1 charge, regardless of charge level
+                    if energyInInventory < locatorDef.energyPerCharge then
+                        withdrawnEnergy = Banking.withdrawEnergy(locatorDef)
+                        local totalEnergy = energyInInventory + withdrawnEnergy
+                        if totalEnergy < locatorDef.energyPerCharge then
+                            API.printlua("Insufficient energy for recharge (" .. totalEnergy .. "/" .. locatorDef.energyPerCharge .. " needed)", 0, false)
+                            if needsRecharge then
+                                API.printlua("No energy available, falling back to alternate route", 4, false)
+                                Routes.useLocator = false
+                            end
+                        end
+                    else
+                        API.printlua("Already have sufficient energy in inventory, skipping withdrawal", 0, false)
+                    end
+                else
+                    API.printlua("No locator found for ore: " .. locatorTargetOre, 0, false)
+                end
+            else
+                API.printlua("No locator route configured for location: " .. miningLocationKey, 0, false)
+            end
+        end
+
+        Banking.closeBank()
+
+        -- Recharge if at 0 charges and have enough energy
+        if needsRecharge and locatorDef then
+            local totalEnergy = Inventory:GetItemAmount(locatorDef.energyId)
+            if totalEnergy >= locatorDef.energyPerCharge then
+                local recharged = Utils.doRechargeDialog(locatorDef, locatorEquipped)
+                -- Re-enable locator route if recharge succeeded
+                if recharged and not Routes.useLocator then
+                    Routes.useLocator = true
+                    API.printlua("Locator recharged - re-enabling locator route", 0, false)
+                end
+            end
+        end
     end
 
     API.printlua("Banking complete", 5, false)
@@ -592,13 +655,23 @@ function Banking.performBanking(bankLocation, miningLocation, oreBoxId, oreConfi
         end
 
         if miningLocation.oreWaypoints and miningLocation.oreWaypoints[selectedOre] then
-            if not Utils.walkThroughWaypoints(miningLocation.oreWaypoints[selectedOre]) then
-                API.printlua("Failed to walk through ore waypoints", 4, false)
-                return false
+            local skipWalk = false
+            if bankLocation.depositBox and miningLocation.oreCoords and miningLocation.oreCoords[selectedOre] then
+                local oreCoord = miningLocation.oreCoords[selectedOre]
+                local coord = API.PlayerCoord()
+                if Utils.getDistance(coord.x, coord.y, oreCoord.x, oreCoord.y) <= 35 then
+                    skipWalk = true
+                end
             end
-            if not Utils.ensureAtOreLocation(miningLocation, selectedOre) then
-                API.printlua("Failed to reach ore location after banking", 4, false)
-                return false
+            if not skipWalk then
+                if not Utils.walkThroughWaypoints(miningLocation.oreWaypoints[selectedOre]) then
+                    API.printlua("Failed to walk through ore waypoints", 4, false)
+                    return false
+                end
+                if not Utils.ensureAtOreLocation(miningLocation, selectedOre) then
+                    API.printlua("Failed to reach ore location after banking", 4, false)
+                    return false
+                end
             end
         end
     end

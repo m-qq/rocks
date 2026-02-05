@@ -8,6 +8,30 @@ local containerCheckBuf = {0}
 local objIdBuf = {0}
 local objTypeBuf = {0}
 local rockertunityTypeBuf = {4}
+local interfaceScanBuf = {}
+
+-- Static lookup table for gem cutting
+local gemCutMap = {
+    [1623] = "Sapphire",
+    [1621] = "Emerald",
+    [1619] = "Ruby",
+    [1617] = "Diamond",
+    [1631] = "Dragonstone"
+}
+
+-- Get the locator target ore from a location's route options
+-- Returns the ore key (e.g., "silver") that the locator should teleport to
+function Utils.getLocatorOreForLocation(locationKey)
+    local LOCATIONS = require("aio mining/mining_locations")
+    local location = LOCATIONS[locationKey]
+    if not location or not location.routeOptions then return nil end
+    for _, option in ipairs(location.routeOptions) do
+        if option.condition and option.condition.resourceLocator then
+            return option.condition.resourceLocator
+        end
+    end
+    return nil
+end
 
 local function waitForCondition(condition, timeout, checkInterval)
     timeout = timeout or 10
@@ -47,16 +71,16 @@ function Utils.formatTime(seconds)
     return string.format("%d:%02d", mins, secs)
 end
 
-local function walkToWaypoint(waypoint, threshold)
+local function walkToWaypoint(waypoint, threshold, waypointIndex)
     threshold = threshold or 6
+    local maxTimeout = 30
+    local stuckTimeout = 15
+
     local randomX = waypoint.x + math.random(-2, 2)
     local randomY = waypoint.y + math.random(-2, 2)
 
-    API.printlua("Walking to " .. randomX .. ", " .. randomY, 0, false)
     API.DoAction_WalkerW(WPOINT.new(randomX, randomY, 0))
 
-    local maxTimeout = 30
-    local stuckTimeout = 15
     local absoluteStart = os.time()
     local lastMovementTime = os.time()
 
@@ -67,14 +91,16 @@ local function walkToWaypoint(waypoint, threshold)
         end
 
         if os.difftime(os.time(), absoluteStart) >= maxTimeout then
-            API.printlua("Walk timed out after " .. maxTimeout .. " seconds", 4, false)
+            local idx = waypointIndex and (" at waypoint " .. waypointIndex) or ""
+            API.printlua("Walk timed out" .. idx, 4, false)
             return false
         end
 
         if API.ReadPlayerMovin2() then
             lastMovementTime = os.time()
         elseif os.difftime(os.time(), lastMovementTime) >= stuckTimeout then
-            API.printlua("Player stuck for " .. stuckTimeout .. " seconds", 4, false)
+            local idx = waypointIndex and (" at waypoint " .. waypointIndex) or ""
+            API.printlua("Player stuck" .. idx, 4, false)
             return false
         end
 
@@ -90,8 +116,7 @@ function Utils.walkThroughWaypoints(waypoints, threshold)
     end
 
     for i, waypoint in ipairs(waypoints) do
-        if not walkToWaypoint(waypoint, threshold or 6) then
-            API.printlua("Failed to reach waypoint " .. i, 4, false)
+        if not walkToWaypoint(waypoint, threshold or 6, i) then
             return false
         end
     end
@@ -100,7 +125,8 @@ function Utils.walkThroughWaypoints(waypoints, threshold)
 end
 
 function Utils.getCombatLevel()
-    return API.VB_FindPSettinOrder(DATA.VARBIT_IDS.COMBAT_LEVEL).state
+    local vb = API.VB_FindPSettinOrder(DATA.VARBIT_IDS.COMBAT_LEVEL)
+    return vb and vb.state or 3
 end
 
 local ROUTE_CONDITION_CHECKS = {
@@ -109,9 +135,10 @@ local ROUTE_CONDITION_CHECKS = {
     archJournal = { itemName = "Archaeology journal" }
 }
 
-function Utils.validateRouteOptions(location)
-    if not location.routeOptions then return true end
+function Utils.validateRouteOptions(location, suppressWarnings)
+    if not location.routeOptions then return true, nil end
 
+    local Routes = require("aio mining/mining_routes")
     local Teleports = require("aio mining/mining_teleports")
     local checkFns = {
         dungeoneeringCape = Teleports.hasDungeoneeringCape,
@@ -119,25 +146,29 @@ function Utils.validateRouteOptions(location)
         archJournal = Teleports.hasArchJournal
     }
 
+    local warning = nil
     local bestAvailable = nil
     for _, option in ipairs(location.routeOptions) do
         if not option.condition then break end
+
+        if option.condition.resourceLocator and Routes.useLocator then
+            return true, nil
+        end
+
         for key, _ in pairs(option.condition) do
             local check = ROUTE_CONDITION_CHECKS[key]
             if not check then goto continue end
 
             local hasFn = checkFns[key]
             if hasFn and hasFn() then
-                return true
+                return true, nil
             end
 
-            if check.skill then
+            if check.skill and not suppressWarnings then
                 local skillLevel = API.XPLevelTable(API.GetSkillXP(check.skill))
                 if skillLevel >= 99 then
-                    local msg = check.capeName .. " not equipped (level " .. skillLevel .. "). Using fallback route."
-                    API.printlua(msg, 4, false)
-                    local MiningGUI = require("aio mining/mining_gui")
-                    MiningGUI.addWarning(msg)
+                    warning = check.capeName .. " not equipped (level " .. skillLevel .. "). Using fallback route."
+                    API.printlua(warning, 4, false)
                     goto continue
                 end
             end
@@ -150,11 +181,11 @@ function Utils.validateRouteOptions(location)
         end
     end
 
-    if bestAvailable then
+    if bestAvailable and not suppressWarnings then
         API.printlua("No " .. bestAvailable .. " found. You can get to the mine quicker using one.", 4, false)
     end
 
-    return true
+    return true, warning
 end
 
 function Utils.disableAutoRetaliate()
@@ -225,8 +256,10 @@ function Utils.getGemBagExtraInt(gemBagId)
     return item.Extra_ints[2] or 0
 end
 
+local gemCountsBuf = { sapphire = 0, emerald = 0, ruby = 0, diamond = 0, dragonstone = 0 }
+
 function Utils.getGemCounts(gemBagId, out)
-    out = out or {}
+    out = out or gemCountsBuf
     local info = DATA.GEM_BAG_INFO[gemBagId]
     if info and info.useVarbits then
         out.sapphire = API.GetVarbitValue(DATA.GEM_BAG_VARBITS.sapphire)
@@ -273,21 +306,22 @@ function Utils.isGemBagFull(gemBagId)
     return Utils.getGemBagTotal(gemBagId) >= Utils.getGemBagCapacity(gemBagId)
 end
 
+function Utils.ensureInventoryOpen()
+    if Inventory:IsOpen() then return true end
+    local inventoryVarbit = API.GetVarbitValue(DATA.VARBIT_IDS.INVENTORY_STATE)
+    if inventoryVarbit == 1 then
+        API.DoAction_Interface(0xc2, 0xffffffff, 1, 1431, 0, 9, API.OFF_ACT_GeneralInterface_route)
+    elseif inventoryVarbit == 0 then
+        API.DoAction_Interface(0xc2, 0xffffffff, 1, 1432, 5, 1, API.OFF_ACT_GeneralInterface_route)
+    end
+    return Utils.waitOrTerminate(function()
+        return Inventory:IsOpen()
+    end, 10, 100, "Failed to open inventory")
+end
+
 function Utils.fillGemBag(gemBagId)
     if not gemBagId then return false end
-    if not Inventory:IsOpen() then
-        local inventoryVarbit = API.GetVarbitValue(DATA.VARBIT_IDS.INVENTORY_STATE)
-        if inventoryVarbit == 1 then
-            API.DoAction_Interface(0xc2, 0xffffffff, 1, 1431, 0, 9, API.OFF_ACT_GeneralInterface_route)
-        elseif inventoryVarbit == 0 then
-            API.DoAction_Interface(0xc2, 0xffffffff, 1, 1432, 5, 1, API.OFF_ACT_GeneralInterface_route)
-        end
-        if not Utils.waitOrTerminate(function()
-            return Inventory:IsOpen()
-        end, 10, 100, "Failed to open inventory") then
-            return false
-        end
-    end
+    if not Utils.ensureInventoryOpen() then return false end
     API.printlua("Filling gem bag...", 5, false)
     local totalBefore = Utils.getGemBagTotal(gemBagId)
     API.DoAction_Inventory1(gemBagId, 0, 1, API.OFF_ACT_GeneralInterface_route)
@@ -331,6 +365,88 @@ function Utils.ensureAtOreLocation(location, selectedOre)
 
     API.printlua("Reached ore location", 0, false)
     return true
+end
+
+--- Check if all skills are at least the given level.
+--- Returns (true) or (false, skillName, skillLevel) for the first failing skill.
+function Utils.checkAllSkillLevels(minLevel)
+    for _, skill in ipairs(DATA.ALL_SKILLS) do
+        local level = API.XPLevelTable(API.GetSkillXP(skill))
+        if level < minLevel then
+            return false, skill, level
+        end
+    end
+    return true
+end
+
+-- Bank reachability checks - each returns (ok) or (false, failMsg)
+local function getBankReachabilityChecks()
+    local Teleports = require("aio mining/mining_teleports")
+    return {
+        player_owned_farm = function()
+            if API.GetVarbitValue(DATA.VARBIT_IDS.POF_BANK_UNLOCKED) == 0 then
+                return false, "Player Owned Farm bank chest is not unlocked"
+            end
+            return true
+        end,
+        max_guild = function()
+            local ok, skill, level = Utils.checkAllSkillLevels(99)
+            if not ok then
+                return false, "Max Guild requires all skills at level 99. " .. skill .. " is level " .. level
+            end
+            return true
+        end,
+        deep_sea_fishing_hub = function()
+            if not Teleports.hasGraceOfTheElves() then
+                return false, "Grace of the Elves necklace is not equipped"
+            end
+            if API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_2) ~= 16 and API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_1) ~= 16 then
+                return false, "Deep Sea Fishing Hub is not set as a Max Guild portal destination"
+            end
+            return true
+        end,
+        wars_retreat = function()
+            if API.GetVarbitValue(DATA.VARBIT_IDS.WARS_RETREAT_UNLOCKED) ~= 1 then
+                return false, "War's Retreat teleport is not unlocked"
+            end
+            return true
+        end,
+        memorial_to_guthix = function()
+            if not Teleports.hasMemoryStrandFavorited() then
+                return false, "Memorial to Guthix requires memory strands favorited in at least one slot"
+            end
+            return true
+        end,
+        archaeology_campus = function()
+            if not Teleports.hasArchJournal() then
+                return false, "Archaeology Campus bank requires Archaeology journal (not found in inventory or equipped)"
+            end
+            return true
+        end,
+        daemonheim_banker = function()
+            if not Teleports.hasRingOfKinship() then
+                return false, "Daemonheim bank requires Ring of Kinship (not found in inventory or equipped)"
+            end
+            return true
+        end
+    }
+end
+
+-- Check if a bank location is reachable. Returns (ok, failMsg).
+function Utils.isBankReachable(bankKey)
+    local checks = getBankReachabilityChecks()
+    local checkFn = checks[bankKey]
+    if not checkFn then return true, nil end
+
+    local ok, failMsg = checkFn()
+    if not ok and failMsg then
+        API.printlua(failMsg, 4, false)
+    end
+    return ok, failMsg
+end
+
+function Utils.validateBankReachability(selectedBankingLocation)
+    return Utils.isBankReachable(selectedBankingLocation)
 end
 
 function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankingLocation, playerOreBox, useOreBox, skipBanking)
@@ -416,46 +532,11 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
         end
     end
 
-    if not skipBanking and selectedBankingLocation == "player_owned_farm" then
-        if API.GetVarbitValue(DATA.VARBIT_IDS.POF_BANK_UNLOCKED) == 0 then
-            return fail("Player Owned Farm bank chest is not unlocked")
-        end
-    end
-
-    if not skipBanking and selectedBankingLocation == "max_guild" then
-        local allSkills = {
-            "ATTACK", "STRENGTH", "RANGED", "MAGIC", "DEFENCE", "CONSTITUTION",
-            "PRAYER", "SUMMONING", "DUNGEONEERING", "AGILITY", "THIEVING", "SLAYER",
-            "HUNTER", "SMITHING", "CRAFTING", "FLETCHING", "HERBLORE", "RUNECRAFTING",
-            "COOKING", "CONSTRUCTION", "FIREMAKING", "WOODCUTTING", "FARMING",
-            "FISHING", "MINING", "DIVINATION", "INVENTION", "ARCHAEOLOGY", "NECROMANCY"
-        }
-        for _, skill in ipairs(allSkills) do
-            local level = API.XPLevelTable(API.GetSkillXP(skill))
-            if level < 99 then
-                return fail("Max Guild requires all skills at level 99. " .. skill .. " is level " .. level)
-            end
-        end
-    end
-
-    if not skipBanking and selectedBankingLocation == "deep_sea_fishing_hub" then
-        if not Teleports.hasGraceOfTheElves() then
-            return fail("Grace of the Elves necklace is not equipped")
-        end
-        if API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_2) ~= 16 and API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_1) ~= 16 then
-            return fail("Deep Sea Fishing Hub is not set as a Max Guild portal destination. Please redirect a Max Guild portal to Deep Sea Fishing Hub.")
-        end
-    end
-
-    if not skipBanking and selectedBankingLocation == "wars_retreat" then
-        if API.GetVarbitValue(DATA.VARBIT_IDS.WARS_RETREAT_UNLOCKED) ~= 1 then
-            return fail("War's Retreat teleport is not unlocked")
-        end
-    end
-
-    if not skipBanking and selectedBankingLocation == "memorial_to_guthix" then
-        if not Teleports.hasMemoryStrandFavorited() then
-            return fail("Memorial to Guthix requires memory strands favorited in at least one slot")
+    if not skipBanking then
+        local bankOk, bankFailMsg = Utils.validateBankReachability(selectedBankingLocation)
+        if not bankOk then
+            if bankFailMsg then MiningGUI.addWarning(bankFailMsg) end
+            return nil
         end
     end
 
@@ -490,7 +571,8 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
         end
     end
 
-    local routeValid = Utils.validateRouteOptions(location)
+    local routeValid, routeWarning = Utils.validateRouteOptions(location, false)
+    if routeWarning then MiningGUI.addWarning(routeWarning) end
     if routeValid == nil then return nil end
 
     if location.danger then
@@ -531,16 +613,28 @@ end
 
 function Utils.clearRockCache()
     cachedRocks = nil
-    cachedRockertunityResult = nil
+    hasRockertunityResult = false
     lastRockertunityTime = 0
 end
 
--- Juju potion functions
+-- Generic buff tracker factory for juju and summoning
+local function createBuffTracker()
+    return {
+        refreshThresholds = {},
+        activateTime = {},
+        activateDuration = {},
+        lastBuffValue = {},
+        locked = {},
+    }
+end
 
-local jujuRefreshThresholds = {}
-local jujuDrinkTime = {}
-local jujuDrinkDuration = {}
-local jujuLastBuffValue = {}
+local jujuTracker = createBuffTracker()
+local familiarTracker = createBuffTracker()
+
+function Utils.resetTimerState()
+    jujuTracker = createBuffTracker()
+    familiarTracker = createBuffTracker()
+end
 
 function Utils.getBuffTimeRemaining(buffId)
     local status = API.Buffbar_GetIDstatus(buffId, false)
@@ -550,12 +644,47 @@ function Utils.getBuffTimeRemaining(buffId)
     return 0
 end
 
-function Utils.needsJujuRefresh(potionDef)
-    local remaining = Utils.getBuffTimeRemaining(potionDef.buffId)
-    if not jujuRefreshThresholds[potionDef.buffId] then
-        jujuRefreshThresholds[potionDef.buffId] = math.random(potionDef.refreshMin, potionDef.refreshMax)
+local function getTimeUntilRefresh(tracker, buffId, defaultThreshold)
+    local buffValue = Utils.getBuffTimeRemaining(buffId)
+
+    if not tracker.locked[buffId] then
+        local last = tracker.lastBuffValue[buffId]
+        if buffValue > 0 and last and last ~= buffValue then
+            tracker.activateTime[buffId] = API.ScriptRuntime()
+            tracker.activateDuration[buffId] = buffValue
+            tracker.locked[buffId] = true
+        end
+        tracker.lastBuffValue[buffId] = buffValue
     end
-    return remaining <= jujuRefreshThresholds[potionDef.buffId]
+
+    local activateTime = tracker.activateTime[buffId]
+    local activateDuration = tracker.activateDuration[buffId]
+
+    if not activateTime or not activateDuration then
+        if buffValue <= 0 then return 0 end
+        return buffValue
+    end
+
+    local elapsed = API.ScriptRuntime() - activateTime
+    local remaining = activateDuration - elapsed
+    local threshold = tracker.refreshThresholds[buffId] or defaultThreshold
+    return math.max(0, remaining - threshold)
+end
+
+local function recordActivation(tracker, buffId, newDuration)
+    tracker.activateTime[buffId] = API.ScriptRuntime()
+    tracker.activateDuration[buffId] = newDuration
+    tracker.refreshThresholds[buffId] = nil
+    tracker.locked[buffId] = false
+    tracker.lastBuffValue[buffId] = newDuration
+end
+
+function Utils.needsJujuRefresh(potionDef)
+    local buffId = potionDef.buffId
+    if not jujuTracker.refreshThresholds[buffId] then
+        jujuTracker.refreshThresholds[buffId] = math.random(potionDef.refreshMin, potionDef.refreshMax)
+    end
+    return Utils.getJujuTimeUntilRefresh(potionDef) <= 0
 end
 
 function Utils.drinkJuju(potionDef)
@@ -579,40 +708,13 @@ function Utils.drinkJuju(potionDef)
     end
 
     local newDuration = Utils.getBuffTimeRemaining(potionDef.buffId)
-    jujuDrinkTime[potionDef.buffId] = API.ScriptRuntime()
-    jujuDrinkDuration[potionDef.buffId] = newDuration
-    jujuRefreshThresholds[potionDef.buffId] = nil
+    recordActivation(jujuTracker, potionDef.buffId, newDuration)
     return true
 end
 
 function Utils.getJujuTimeUntilRefresh(potionDef)
     if not potionDef then return 0 end
-
-    local buffId = potionDef.buffId
-    local buffValue = Utils.getBuffTimeRemaining(buffId)
-
-    -- Detect buff bar updates to sync real-time tracking
-    local lastValue = jujuLastBuffValue[buffId]
-    if buffValue > 0 and lastValue and lastValue ~= buffValue then
-        -- Buff bar just updated, sync our tracking to this moment
-        jujuDrinkTime[buffId] = API.ScriptRuntime()
-        jujuDrinkDuration[buffId] = buffValue
-    end
-    jujuLastBuffValue[buffId] = buffValue
-
-    local drinkTime = jujuDrinkTime[buffId]
-    local drinkDuration = jujuDrinkDuration[buffId]
-
-    if not drinkTime or not drinkDuration then
-        if buffValue <= 0 then return 0 end
-        return buffValue
-    end
-
-    local elapsed = API.ScriptRuntime() - drinkTime
-    local remaining = drinkDuration - elapsed
-
-    local threshold = jujuRefreshThresholds[buffId] or potionDef.refreshMin
-    return math.max(0, remaining - threshold)
+    return getTimeUntilRefresh(jujuTracker, potionDef.buffId, potionDef.refreshMin)
 end
 
 function Utils.forceIdle()
@@ -629,15 +731,11 @@ end
 
 -- Summoning familiar functions
 
-local familiarRefreshThresholds = {}
-local familiarSummonTime = {}
-local familiarSummonDuration = {}
-local familiarLastBuffValue = {}
 
 function Utils.getSummoningPoints()
-    local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_POINTS)
-    if result and result[1] and result[1].textids then
-        local current, max = result[1].textids:match("^(%d+)/(%d+)$")
+    interfaceScanBuf = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_POINTS)
+    if interfaceScanBuf and interfaceScanBuf[1] and interfaceScanBuf[1].textids then
+        local current, max = interfaceScanBuf[1].textids:match("^(%d+)/(%d+)$")
         if current then
             return tonumber(current), tonumber(max)
         end
@@ -646,9 +744,9 @@ function Utils.getSummoningPoints()
 end
 
 function Utils.isFamiliarActive(familiarDef)
-    local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_FAMILIAR)
-    if result and result[1] and result[1].textids then
-        return result[1].textids:lower() == familiarDef.name:lower()
+    interfaceScanBuf = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_FAMILIAR)
+    if interfaceScanBuf and interfaceScanBuf[1] and interfaceScanBuf[1].textids then
+        return interfaceScanBuf[1].textids:lower() == familiarDef.name:lower()
     end
     return false
 end
@@ -660,10 +758,10 @@ function Utils.needsFamiliarRefresh(familiarDef)
         if remaining <= 0 then
             return false
         end
-        if not familiarRefreshThresholds[buffId] then
-            familiarRefreshThresholds[buffId] = math.random(DATA.SUMMONING_REFRESH_MIN, DATA.SUMMONING_REFRESH_MAX)
+        if not familiarTracker.refreshThresholds[buffId] then
+            familiarTracker.refreshThresholds[buffId] = math.random(DATA.SUMMONING_REFRESH_MIN, DATA.SUMMONING_REFRESH_MAX)
         end
-        return remaining <= familiarRefreshThresholds[buffId]
+        return Utils.getFamiliarTimeUntilRefresh(familiarDef) <= 0
     end
     return true
 end
@@ -685,8 +783,8 @@ function Utils.summonFamiliar(familiarDef)
 
     local expectedName = familiarDef.name:lower()
     if not waitForCondition(function()
-        local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_FAMILIAR)
-        return result and result[1] and result[1].textids and result[1].textids:lower() == expectedName
+        interfaceScanBuf = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_FAMILIAR)
+        return interfaceScanBuf and interfaceScanBuf[1] and interfaceScanBuf[1].textids and interfaceScanBuf[1].textids:lower() == expectedName
     end, 10, 100) then
         API.printlua("Failed to confirm familiar was summoned", 4, false)
         return false
@@ -696,38 +794,13 @@ function Utils.summonFamiliar(familiarDef)
 
     local buffId = DATA.SUMMONING_BUFF_ID
     local newDuration = Utils.getBuffTimeRemaining(buffId)
-    familiarSummonTime[buffId] = API.ScriptRuntime()
-    familiarSummonDuration[buffId] = newDuration
-    familiarRefreshThresholds[buffId] = nil
+    recordActivation(familiarTracker, buffId, newDuration)
     return true
 end
 
 function Utils.getFamiliarTimeUntilRefresh(familiarDef)
     if not familiarDef then return 0 end
-
-    local buffId = DATA.SUMMONING_BUFF_ID
-    local buffValue = Utils.getBuffTimeRemaining(buffId)
-
-    local lastValue = familiarLastBuffValue[buffId]
-    if buffValue > 0 and lastValue and lastValue ~= buffValue then
-        familiarSummonTime[buffId] = API.ScriptRuntime()
-        familiarSummonDuration[buffId] = buffValue
-    end
-    familiarLastBuffValue[buffId] = buffValue
-
-    local summonTime = familiarSummonTime[buffId]
-    local summonDuration = familiarSummonDuration[buffId]
-
-    if not summonTime or not summonDuration then
-        if buffValue <= 0 then return 0 end
-        return buffValue
-    end
-
-    local elapsed = API.ScriptRuntime() - summonTime
-    local remaining = summonDuration - elapsed
-
-    local threshold = familiarRefreshThresholds[buffId] or DATA.SUMMONING_REFRESH_MIN
-    return math.max(0, remaining - threshold)
+    return getTimeUntilRefresh(familiarTracker, DATA.SUMMONING_BUFF_ID, DATA.SUMMONING_REFRESH_MIN)
 end
 
 function Utils.canRefreshSummoningPoints(refreshLocation)
@@ -742,7 +815,15 @@ function Utils.canRefreshSummoningPoints(refreshLocation)
     return true
 end
 
-function Utils.refreshSummoningPoints(miningLocation, selectedOre, familiarDef, oreBoxId, oreConfig, gemBagId, refreshLocation)
+function Utils.refreshSummoningPoints(config)
+    local miningLocation = config.miningLocation
+    local selectedOre = config.selectedOre
+    local familiarDef = config.familiarDef
+    local oreBoxId = config.oreBoxId
+    local oreConfig = config.oreConfig
+    local gemBagId = config.gemBagId
+    local refreshLocation = config.refreshLocation
+
     if not Utils.canRefreshSummoningPoints(refreshLocation) then
         if refreshLocation and refreshLocation.unlockChecks then
             for _, check in ipairs(refreshLocation.unlockChecks) do
@@ -838,13 +919,7 @@ function Utils.refreshSummoningPoints(miningLocation, selectedOre, familiarDef, 
         end
     end
 
-    if API.BankOpen2() then
-        API.KeyboardPress2(0x1B, 60, 100)
-        Utils.waitOrTerminate(function()
-            return not API.Compare2874Status(24, false)
-        end, 5, 100, "Bank did not close")
-        API.RandomSleep2(600, 600, 300)
-    end
+    Banking.closeBank()
 
     if familiarDef and Banking.findSummoningPouchInInventory(familiarDef) then
         Utils.summonFamiliar(familiarDef)
@@ -858,6 +933,98 @@ function Utils.refreshSummoningPoints(miningLocation, selectedOre, familiarDef, 
     end
 
     return true, hasMorePouches
+end
+
+local RL = DATA.RESOURCE_LOCATOR
+
+local function isRechargeDialogOpen()
+    interfaceScanBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.RECHARGE_DIALOG)
+    if #interfaceScanBuf > 0 and interfaceScanBuf[1].textids then
+        return interfaceScanBuf[1].textids:find("how many charges do you wish to add") ~= nil, interfaceScanBuf[1].textids
+    end
+    return false, nil
+end
+
+local function typeNumber(num)
+    local digits = tostring(num)
+    for i = 1, #digits do
+        API.KeyboardPress2(digits:byte(i), 40, 60)
+        API.RandomSleep2(200, 200, 200)
+    end
+    API.KeyboardPress2(0x0D, 50, 80)
+    API.RandomSleep2(500, 300, 300)
+end
+
+-- Opens recharge dialog, adds charges from energy already in inventory.
+-- Returns (success, hasMoreEnergy).
+function Utils.doRechargeDialog(locator, isEquipped)
+    local energyCount = Inventory:GetItemAmount(locator.energyId)
+    if energyCount <= 0 then
+        API.printlua("No energy in inventory to recharge locator", 4, false)
+        return false, false
+    end
+
+    API.printlua("Opening recharge dialog for " .. locator.name .. "...", 0, false)
+    API.DoAction_Inventory1(locator.id, 0, 7, API.OFF_ACT_GeneralInterface_route2)
+    API.RandomSleep2(600, 300, 300)
+
+    local dialogText = nil
+    if not waitForCondition(function()
+        local open, text = isRechargeDialogOpen()
+        if open then dialogText = text end
+        return open
+    end, 10, 100) then
+        API.printlua("Recharge dialog did not open", 4, false)
+        return false, false
+    end
+
+    local currentCharges = tonumber(dialogText:match("has (%d+)/50"))
+    if not currentCharges then
+        API.printlua("Could not parse current charges from dialog", 4, false)
+        return false, false
+    end
+
+    local chargesToAdd = RL.MAX_CHARGES - currentCharges
+    local maxFromEnergy = math.floor(energyCount / locator.energyPerCharge)
+    local actualAdd = math.min(chargesToAdd, maxFromEnergy)
+
+    if actualAdd <= 0 then
+        API.KeyboardPress2(0x1B, 60, 100)
+        return false, false
+    end
+
+    API.printlua("Adding " .. actualAdd .. " charges (" .. actualAdd * locator.energyPerCharge .. " energy)", 0, false)
+    typeNumber(actualAdd)
+    API.RandomSleep2(600, 300, 300)
+
+    if not waitForCondition(function()
+        interfaceScanBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.RECHARGE_CONFIRM)
+        return #interfaceScanBuf > 0 and interfaceScanBuf[1].textids and interfaceScanBuf[1].textids:find("This will add")
+    end, 10, 100) then
+        API.printlua("Recharge confirmation dialog did not appear", 4, false)
+        return false, false
+    end
+    API.KeyboardPress2(0x20, 60, 100)
+    API.RandomSleep2(600, 300, 300)
+
+    if not waitForCondition(function()
+        interfaceScanBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.RECHARGE_CONFIRM2)
+        return #interfaceScanBuf > 0 and interfaceScanBuf[1].textids and interfaceScanBuf[1].textids:find("energy to add")
+    end, 10, 100) then
+        API.printlua("Second recharge confirmation did not appear", 4, false)
+        return false, false
+    end
+    API.KeyboardPress2(0x31, 60, 100)
+    API.RandomSleep2(600, 300, 300)
+
+    local Teleports = require("aio mining/mining_teleports")
+    waitForCondition(function()
+        return Teleports.getLocatorCharges(locator, isEquipped) > currentCharges
+    end, 5, 100)
+
+    local newCharges = Teleports.getLocatorCharges(locator, isEquipped)
+    API.printlua("Recharged: " .. currentCharges .. " -> " .. math.floor(newCharges) .. "/" .. RL.MAX_CHARGES, 0, false)
+    return newCharges > currentCharges, maxFromEnergy > actualAdd
 end
 
 -- Shared mining functions (used by both script and script_gui)
@@ -898,7 +1065,8 @@ function Utils.shouldThreeTick(cfg, state)
     return ticksSinceLastInteract >= state.nextTickTarget
 end
 
-local cachedRockertunityResult = nil
+local cachedRockertunityResult = { id = 0, x = 0, y = 0 }
+local hasRockertunityResult = false
 local lastRockertunityTime = 0
 
 function Utils.findRockertunity(oreConfig)
@@ -906,10 +1074,10 @@ function Utils.findRockertunity(oreConfig)
 
     local now = os.clock()
     if now - lastRockertunityTime < 0.6 then
-        return cachedRockertunityResult
+        return hasRockertunityResult and cachedRockertunityResult or nil
     end
     lastRockertunityTime = now
-    cachedRockertunityResult = nil
+    hasRockertunityResult = false
 
     local rockertunities = API.GetAllObjArray1(DATA.ROCKERTUNITY_IDS, 20, rockertunityTypeBuf)
     if #rockertunities == 0 then return nil end
@@ -920,11 +1088,10 @@ function Utils.findRockertunity(oreConfig)
             local distance = Utils.getDistance(rock.x, rock.y, rockertunity.Tile_XYZ.x, rockertunity.Tile_XYZ.y)
             local match = customDist and (distance <= customDist) or (distance < 1)
             if match then
-                cachedRockertunityResult = {
-                    id = rock.id,
-                    x = rock.x,
-                    y = rock.y
-                }
+                cachedRockertunityResult.id = rock.id
+                cachedRockertunityResult.x = rock.x
+                cachedRockertunityResult.y = rock.y
+                hasRockertunityResult = true
                 return cachedRockertunityResult
             end
         end
@@ -933,7 +1100,7 @@ function Utils.findRockertunity(oreConfig)
 end
 
 function Utils.mineRockertunity(oreConfig, rockTarget, state)
-    API.printlua("Mining rockertunity at " .. rockTarget.x .. ", " .. rockTarget.y, 5, false)
+    API.printlua("Mining rockertunity at " .. rockTarget.x .. ", " .. rockTarget.y, 0, false)
 
     API.RandomSleep2(600, 400, 200)
 
@@ -952,7 +1119,12 @@ function Utils.mineRockertunity(oreConfig, rockTarget, state)
         return true
     end
 
-    return Utils.waitOrTerminate(isGone, 30, 100, "Rockertunity did not disappear")
+    local success = Utils.waitOrTerminate(isGone, 30, 100, "Rockertunity did not disappear")
+    if success then
+        hasRockertunityResult = false
+        lastRockertunityTime = 0
+    end
+    return success
 end
 
 function Utils.isNearOreLocation(loc, selectedOre)
@@ -968,16 +1140,13 @@ end
 
 function Utils.mineRock(oreConfig, state)
     local reason = state.hasInteracted and "Stamina refresh" or "Initial interaction"
-    API.printlua("Mining " .. oreConfig.name .. " (" .. reason .. ")", 5, false)
+    API.printlua("Mining " .. oreConfig.name .. " (" .. reason .. ")", 0, false)
     local tile = nil
     if not state.hasInteracted and cachedRocks and #cachedRocks > 0 then
         local rock = cachedRocks[math.random(#cachedRocks)]
-        local tileX = math.floor(rock.x)
-        local tileY = math.floor(rock.y)
-        API.printlua(string.format("Selected rock: x=%.2f y=%.2f -> tile=(%d,%d)", rock.x, rock.y, tileX, tileY), 0, false)
-        tile = WPOINT.new(tileX, tileY, 0)
+        tile = WPOINT.new(rock.x, rock.y, 0)
     end
-    Interact:Object(oreConfig.name, oreConfig.action, tile, 25)
+    Interact:Object(oreConfig.name, oreConfig.action, tile, 35)
     if not Utils.waitOrTerminate(function() return Utils.isMiningActive(state) or Inventory:IsFull() end, 30, 50, "Failed to start mining") then
         return false
     end
@@ -988,7 +1157,7 @@ function Utils.mineRock(oreConfig, state)
 end
 
 function Utils.threeTickInteract(oreConfig, state)
-    Interact:Object(oreConfig.name, oreConfig.action, 25)
+    Interact:Object(oreConfig.name, oreConfig.action, 35)
     state.lastInteractTick = API.Get_tick()
     state.nextTickTarget = math.random(100) <= 3 and 4 or math.random(2, 3)
     API.RandomSleep2(50, 25, 25)
@@ -1001,6 +1170,48 @@ function Utils.hasOresInInventory(ore)
         end
     end
     return false
+end
+
+-- Recharge locator on-site if we have energy and charges are empty
+-- Returns true if recharged, false if no recharge needed or couldn't recharge
+function Utils.tryRechargeLocatorOnSite(locationKey)
+    local Routes = require("aio mining/mining_routes")
+    if not Routes.useLocator then return false end
+
+    local locatorTargetOre = Utils.getLocatorOreForLocation(locationKey)
+    if not locatorTargetOre then return false end
+
+    local Teleports = require("aio mining/mining_teleports")
+    local locatorDef, locatorEquipped = Teleports.scanForLocator(locatorTargetOre)
+    if not locatorDef then return false end
+
+    local charges = Teleports.getLocatorCharges(locatorDef, locatorEquipped)
+    if charges > 0 then return false end
+
+    local energyInInventory = Inventory:GetItemAmount(locatorDef.energyId)
+    if energyInInventory < locatorDef.energyPerCharge then return false end
+
+    API.printlua("Recharging locator on-site with " .. energyInInventory .. " energy...", 0, false)
+    return Utils.doRechargeDialog(locatorDef, locatorEquipped)
+end
+
+-- Returns true if we need to bank specifically for locator energy
+function Utils.needsLocatorRecharge(locationKey)
+    local Routes = require("aio mining/mining_routes")
+    if not Routes.useLocator then return false end
+
+    local locatorTargetOre = Utils.getLocatorOreForLocation(locationKey)
+    if not locatorTargetOre then return false end
+
+    local Teleports = require("aio mining/mining_teleports")
+    local locatorDef, locatorEquipped = Teleports.scanForLocator(locatorTargetOre)
+    if not locatorDef then return false end
+
+    local charges = Teleports.getLocatorCharges(locatorDef, locatorEquipped)
+    if charges > 0 then return false end
+
+    local energyInInventory = Inventory:GetItemAmount(locatorDef.energyId)
+    return energyInInventory < locatorDef.energyPerCharge
 end
 
 function Utils.needsBanking(cfg, ore, state)
@@ -1117,8 +1328,8 @@ function Utils.dropAllOres(ore, state)
 end
 
 function Utils.isGemCuttingInterfaceOpen()
-    local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.GEM_CUTTING)
-    return result[1] and result[1].textids == "Gem Cutting"
+    interfaceScanBuf = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.GEM_CUTTING)
+    return interfaceScanBuf[1] and interfaceScanBuf[1].textids == "Gem Cutting"
 end
 
 function Utils.cutGemType(gemId, gemName, cutName)
@@ -1158,14 +1369,6 @@ end
 
 function Utils.cutAndDropGems(ore, state)
     if not Utils.waitForMiningToStop(state) then return end
-
-    local gemCutMap = {
-        [1623] = "Sapphire",
-        [1621] = "Emerald",
-        [1619] = "Ruby",
-        [1617] = "Diamond",
-        [1631] = "Dragonstone"
-    }
 
     for _, gemId in ipairs(ore.oreIds) do
         local gemName = ore.oreNames and ore.oreNames[gemId] or ("Gem " .. gemId)

@@ -8,6 +8,14 @@ DATA.MEMORY_STRAND_ID = 39486
 DATA.SLAYER_CAPE_IDS = {9786, 9787, 34274, 34275, 53810, 53839, 31282, 53782}
 DATA.DUNGEONEERING_CAPE_IDS = {18508, 18509, 34294, 34295, 53820, 53849, 19709, 53792}
 
+DATA.ALL_SKILLS = {
+    "ATTACK", "STRENGTH", "RANGED", "MAGIC", "DEFENCE", "CONSTITUTION",
+    "PRAYER", "SUMMONING", "DUNGEONEERING", "AGILITY", "THIEVING", "SLAYER",
+    "HUNTER", "SMITHING", "CRAFTING", "FLETCHING", "HERBLORE", "RUNECRAFTING",
+    "COOKING", "CONSTRUCTION", "FIREMAKING", "WOODCUTTING", "FARMING",
+    "FISHING", "MINING", "DIVINATION", "INVENTION", "ARCHAEOLOGY", "NECROMANCY"
+}
+
 DATA.DUNGEONEERING_ORES = {
     "novite", "bathus", "marmaros", "kratonium", "fractite",
     "zephyrium", "argonite", "katagon", "gorgonite", "promethium"
@@ -245,6 +253,102 @@ DATA.SUMMONING_REFRESH_LOCATIONS = {
 DATA.ALL_SUMMONING_POUCH_IDS = {}
 for _, def in pairs(DATA.SUMMONING_FAMILIARS) do
     DATA.ALL_SUMMONING_POUCH_IDS[def.pouchId] = true
+end
+
+-- ============================================================================
+-- RESOURCE LOCATOR
+-- ============================================================================
+
+DATA.RESOURCE_LOCATOR = {
+    EQUIPMENT_SLOT = 3,
+    MAX_CHARGES = 50,
+    TELEPORT_ANIM = 11885,
+
+    -- Ordered by tier (lowest first). scanForLocator iterates in order.
+    -- To add a new tier: append entry here, everything else derives from this.
+    LOCATORS = {
+        { name = "Inferior locator", id = 15005, energyId = 29315, energyPerCharge = 1,
+          ores = { copper = true, tin = true, iron = true } },
+        { name = "Poor locator",     id = 15006, energyId = 29317, energyPerCharge = 2,
+          ores = { copper = true, tin = true, iron = true, silver = true, clay = true } },
+        { name = "Good locator",     id = 15007, energyId = 29319, energyPerCharge = 3,
+          ores = { copper = true, tin = true, iron = true, silver = true, clay = true, gold = true, mithril = true } },
+        { name = "Superior locator", id = 15008, energyId = 29321, energyPerCharge = 4,
+          ores = { copper = true, tin = true, iron = true, silver = true, clay = true, gold = true, mithril = true, adamantite = true, runite = true } },
+    },
+
+    -- Ore key to interface action params for selecting ore in locator window.
+    -- To add a new ore destination: add one entry here.
+    DESTINATIONS = {
+        copper     = { a = 0x2e, b = 0x1b4, c = 1, d = 844, e = 28, f = -1 },
+        tin        = { a = 0x2e, b = 0x1b6, c = 1, d = 844, e = 29, f = -1 },
+        iron       = { a = 0x2e, b = 0x1b8, c = 1, d = 844, e = 30, f = -1 },
+        silver     = { a = 0x2e, b = 0x1ba, c = 1, d = 844, e = 31, f = -1 },
+        clay       = { a = 0x2e, b = 0x1b2, c = 1, d = 844, e = 32, f = -1 },
+        gold       = { a = 0x2e, b = 0x1bc, c = 1, d = 844, e = 33, f = -1 },
+        mithril    = { a = 0x2e, b = 0x1bf, c = 1, d = 844, e = 34, f = -1 },
+        adamantite = { a = 0x2e, b = 0x1c1, c = 1, d = 844, e = 35, f = -1 },
+        runite     = { a = 0x2e, b = 0x1c3, c = 1, d = 844, e = 36, f = -1 },
+    },
+
+    -- Known landing coords per ore, used for retry logic when targeting a specific location.
+    -- Multiple destinations per ore are possible (locator picks randomly).
+    -- To add a new known landing: append entry here.
+    TELEPORT_TARGETS = {
+        { ore = "copper",     coord = { x = 3229, y = 3150 } },
+        { ore = "copper",     coord = { x = 2276, y = 4514 } },
+        { ore = "tin",        coord = { x = 3229, y = 3150 } },
+        { ore = "tin",        coord = { x = 2276, y = 4514 } },
+        { ore = "iron",       coord = { x = 3148, y = 3150 } },
+        { ore = "iron",       coord = { x = 3179, y = 3369 } },
+        { ore = "silver",     coord = { x = 3299, y = 3308 } },
+        { ore = "silver",     coord = { x = 2907, y = 3345 } },
+        { ore = "clay",       coord = { x = 3232, y = 3151 } },
+        { ore = "clay",       coord = { x = 2277, y = 4513 } },
+        { ore = "gold",       coord = { x = 3303, y = 3307 } },
+        { ore = "gold",       coord = { x = 2971, y = 3236 } },
+        { ore = "mithril",    coord = { x = 3281, y = 3369 } },
+        { ore = "mithril",    coord = { x = 2696, y = 3331 } },
+        { ore = "adamantite", coord = { x = 2971, y = 3236 } },
+        { ore = "adamantite", coord = { x = 3321, y = 2872 }, questCheck = { id = 391, name = "Crocodile Tears" } },
+        { ore = "runite",     coord = { x = 2860, y = 9578 }, combatCheck = { minLevel = 31 } },
+        { ore = "runite",     coord = { x = 2628, y = 3140 } },
+    },
+
+    -- Mining location key to { ore, coord } for alternate route mode.
+    -- Uses lowest-tier locator ore that lands near each location.
+    -- To add a new alternate route: add entry here + route def in mining_routes + routeOption in mining_locations.
+    ALTERNATE_ROUTES = {
+        lumbridge_se                = { ore = "copper",  coord = { x = 3229, y = 3150 } },
+        lumbridge_sw                = { ore = "iron",    coord = { x = 3148, y = 3150 } },
+        varrock_sw                  = { ore = "iron",    coord = { x = 3179, y = 3369 } },
+        varrock_se                  = { ore = "mithril", coord = { x = 3281, y = 3369 } },
+        al_kharid                   = { ore = "silver",  coord = { x = 3299, y = 3308 } },
+        al_kharid_gem_rocks         = { ore = "silver",  coord = { x = 3299, y = 3308 } },
+        al_kharid_resource_dungeon  = { ore = "silver",  coord = { x = 3299, y = 3308 } },
+        rimmington                  = { ore = "gold",    coord = { x = 2971, y = 3236 } },
+        karamja_volcano             = { ore = "runite",  coord = { x = 2860, y = 9578 } },
+    },
+
+    MAX_DISTANCE = 20,
+
+    INTERFACES = {
+        LOCATOR_WINDOW    = { { 844,3,-1,0 }, { 844,52,-1,0 }, { 844,52,14,0 } },
+        WARNING           = { { 1186,2,-1,0 }, { 1186,3,-1,0 } },
+        CONFIRM_DONT_ASK  = { { 1188,5,-1,0 }, { 1188,2,-1,0 }, { 1188,0,-1,0 }, { 1188,18,-1,0 }, { 1188,22,-1,0 }, { 1188,35,-1,0 } },
+        CONFIRM_TRAVEL    = { { 1188,5,-1,0 }, { 1188,2,-1,0 }, { 1188,0,-1,0 }, { 1188,8,-1,0 }, { 1188,12,-1,0 }, { 1188,6,-1,0 } },
+        RECHARGE_DIALOG   = { { 1603,3,-1,0 }, { 1603,2,-1,0 } },
+        RECHARGE_CONFIRM  = { { 1189,2,-1,0 }, { 1189,3,-1,0 } },
+        RECHARGE_CONFIRM2 = { { 1188,5,-1,0 }, { 1188,3,-1,0 }, { 1188,3,14,0 } },
+    },
+}
+
+-- Derived lookup sets, built once from LOCATORS, used by banking/keepItems
+DATA.ALL_LOCATOR_IDS = {}
+DATA.ALL_ENERGY_IDS = {}
+for _, loc in ipairs(DATA.RESOURCE_LOCATOR.LOCATORS) do
+    DATA.ALL_LOCATOR_IDS[loc.id] = true
+    DATA.ALL_ENERGY_IDS[loc.energyId] = true
 end
 
 return DATA

@@ -13,8 +13,8 @@ function OreBox.find()
     return nil
 end
 
-function OreBox.isOresomeComplete()
-    for _, vb in pairs(DATA.VARBIT_IDS.ORESOME) do
+local function areAllVarbitsComplete(varbitTable)
+    for _, vb in pairs(varbitTable) do
         if API.GetVarbitValue(vb) ~= 100 then
             return false
         end
@@ -22,13 +22,12 @@ function OreBox.isOresomeComplete()
     return true
 end
 
+function OreBox.isOresomeComplete()
+    return areAllVarbitsComplete(DATA.VARBIT_IDS.ORESOME)
+end
+
 function OreBox.isStillOresomeComplete()
-    for _, vb in pairs(DATA.VARBIT_IDS.STILL_ORESOME) do
-        if API.GetVarbitValue(vb) ~= 100 then
-            return false
-        end
-    end
-    return true
+    return areAllVarbitsComplete(DATA.VARBIT_IDS.STILL_ORESOME)
 end
 
 function OreBox.getCapacity(boxId, oreConfig)
@@ -79,20 +78,8 @@ function OreBox.fill(boxId)
     if not boxId then
         return false
     end
-    if not Inventory:IsOpen() then
-        local inventoryVarbit = API.GetVarbitValue(DATA.VARBIT_IDS.INVENTORY_STATE)
-        if inventoryVarbit == 1 then
-            API.DoAction_Interface(0xc2, 0xffffffff, 1, 1431, 0, 9, API.OFF_ACT_GeneralInterface_route)
-        elseif inventoryVarbit == 0 then
-            API.DoAction_Interface(0xc2, 0xffffffff, 1, 1432, 5, 1, API.OFF_ACT_GeneralInterface_route)
-        end
-        if not Utils.waitOrTerminate(function()
-            return Inventory:IsOpen()
-        end, 10, 100, "Failed to open inventory") then
-            return false
-        end
-    end
-    API.printlua("Filling ore box...", 5, false)
+    if not Utils.ensureInventoryOpen() then return false end
+    API.printlua("Filling ore box...", 0, false)
     if API.DoAction_Inventory1(boxId, 0, 1, API.OFF_ACT_GeneralInterface_route) then
         API.RandomSleep2(600, 200, 200)
         return true

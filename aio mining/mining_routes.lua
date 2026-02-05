@@ -5,9 +5,12 @@ local DATA = require("aio mining/mining_data")
 
 local Routes = {}
 
+Routes.useLocator = false
+
 -- Reusable single-element buffers for GetAllObjArray1 calls
 local objIdBuf = {0}
 local objTypeBuf = {0}
+local interfaceScanBuf = {}
 
 local function checkWaitCondition(wait)
     local coord = API.PlayerCoord()
@@ -71,8 +74,8 @@ local function checkWaitCondition(wait)
     end
 
     if wait.interface then
-        local result = API.ScanForInterfaceTest2Get(false, wait.interface.ids)
-        if #result == 0 or result[1].textids ~= wait.interface.text then
+        interfaceScanBuf = API.ScanForInterfaceTest2Get(false, wait.interface.ids)
+        if #interfaceScanBuf == 0 or interfaceScanBuf[1].textids ~= wait.interface.text then
             return false
         end
     end
@@ -113,7 +116,7 @@ local function shouldSkipStep(skip_if)
     return false
 end
 
-local function executeStep(step)
+function Routes.executeStep(step)
     local desc = step.desc or "Step"
 
     if shouldSkipStep(step.skip_if) then
@@ -214,7 +217,7 @@ end
 function Routes.execute(route)
     for i, step in ipairs(route) do
         API.printlua("Executing route step " .. i .. "/" .. #route, 0, false)
-        if not executeStep(step) then
+        if not Routes.executeStep(step) then
             API.printlua("Route failed at step " .. i, 4, false)
             return false
         end
@@ -225,6 +228,10 @@ function Routes.execute(route)
 end
 
 local lodestoneWarned = {}
+
+function Routes.resetState()
+    lodestoneWarned = {}
+end
 
 function Routes.checkLodestones(route)
     if not route then return end
@@ -337,10 +344,46 @@ function Routes.selectRoute(destination, fromLocationKey)
             end
         elseif option.condition.region and Utils.isAtRegion(option.condition.region) then
             return option.route
+        elseif option.condition.resourceLocator and Routes.useLocator then
+            if Teleports.hasResourceLocator(option.condition.resourceLocator) then
+                return option.route
+            end
         end
         ::continue::
     end
     return nil
+end
+
+-- Map teleport type to the item IDs it requires.
+local teleportItemMap = {
+    archJournal = { DATA.ARCH_JOURNAL_ID },
+    ringOfKinship = { DATA.RING_OF_KINSHIP_ID },
+    dungeoneeringCape = DATA.DUNGEONEERING_CAPE_IDS,
+    slayerCape = DATA.SLAYER_CAPE_IDS,
+}
+
+-- Return the set of item IDs required by a route's teleport steps.
+function Routes.getRouteItemRequirements(route)
+    local items = {}
+    if not route then return items end
+    for _, step in ipairs(route) do
+        if step.action and step.action.teleport then
+            local ids = teleportItemMap[step.action.teleport]
+            if ids then
+                for _, id in ipairs(ids) do
+                    items[id] = true
+                end
+            end
+        end
+    end
+    return items
+end
+
+-- Return the set of item IDs required by the selected route for a destination.
+function Routes.getSelectedRouteItemRequirements(destination, fromLocationKey)
+    if not destination then return {} end
+    local route = Routes.selectRoute(destination, fromLocationKey)
+    return Routes.getRouteItemRequirements(route)
 end
 
 function Routes.travelTo(destination, selectedOre, fromLocationKey)
@@ -371,7 +414,40 @@ function Routes.travelTo(destination, selectedOre, fromLocationKey)
     Banking.closeBank()
 
     API.printlua("Traveling to " .. destination.name .. "...", 5, false)
-    if not Routes.execute(route) then
+    local routeSuccess = Routes.execute(route)
+
+    -- If locator route failed, check if we should fall back to alternate route
+    if not routeSuccess and Routes.useLocator and destination.routeOptions then
+        -- Find locator ore from route options to check if locator is depleted
+        local locatorOre = nil
+        for _, option in ipairs(destination.routeOptions) do
+            if option.condition and option.condition.resourceLocator then
+                locatorOre = option.condition.resourceLocator
+                break
+            end
+        end
+
+        if locatorOre then
+            local locator, isEquipped = Teleports.scanForLocator(locatorOre)
+            if locator then
+                local charges = Teleports.getLocatorCharges(locator, isEquipped)
+                local energyInInventory = Inventory:GetItemAmount(locator.energyId)
+
+                -- If out of charges and not enough energy for 1 charge, switch to fallback route
+                if charges <= 0 and energyInInventory < locator.energyPerCharge then
+                    API.printlua("Locator depleted with no energy - switching to fallback route", 0, false)
+                    Routes.useLocator = false
+                    local fallbackRoute = Routes.selectRoute(destination, fromLocationKey)
+                    if fallbackRoute and fallbackRoute ~= route then
+                        API.printlua("Using fallback route...", 0, false)
+                        routeSuccess = Routes.execute(fallbackRoute)
+                    end
+                end
+            end
+        end
+    end
+
+    if not routeSuccess then
         API.printlua("Route to " .. destination.name .. " failed", 4, false)
         return false
     end
@@ -1828,6 +1904,142 @@ Routes.TO_WARS_RETREAT_BANK = {
         action = { teleport = "warsRetreat" },
         skip_if = { nearCoord = {x = 3294, y = 10127} },
         desc = "Teleport to War's Retreat"
+    }
+}
+
+local RL_ALT = DATA.RESOURCE_LOCATOR.ALTERNATE_ROUTES
+
+Routes.TO_LUMBRIDGE_SE_MINE_VIA_LOCATOR = {
+    {
+        action = { teleport = "resourceLocatorRoute", teleportArg = RL_ALT.lumbridge_se },
+        desc = "Locator teleport to Lumbridge SE"
+    }
+}
+
+Routes.TO_LUMBRIDGE_SW_MINE_VIA_LOCATOR = {
+    {
+        action = { teleport = "resourceLocatorRoute", teleportArg = RL_ALT.lumbridge_sw },
+        desc = "Locator teleport to Lumbridge SW"
+    }
+}
+
+Routes.TO_VARROCK_SW_MINE_VIA_LOCATOR = {
+    {
+        action = { teleport = "resourceLocatorRoute", teleportArg = RL_ALT.varrock_sw },
+        desc = "Locator teleport to Varrock SW"
+    }
+}
+
+Routes.TO_VARROCK_SE_MINE_VIA_LOCATOR = {
+    {
+        action = { teleport = "resourceLocatorRoute", teleportArg = RL_ALT.varrock_se },
+        desc = "Locator teleport to Varrock SE"
+    }
+}
+
+Routes.TO_AL_KHARID_MINE_VIA_LOCATOR = {
+    {
+        action = { teleport = "resourceLocatorRoute", teleportArg = RL_ALT.al_kharid },
+        desc = "Locator teleport near Al Kharid"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3300, y = 3294}} } },
+        skip_if = { nearCoord = {x = 3300, y = 3294} },
+        desc = "Walk to Al Kharid mine"
+    }
+}
+
+Routes.TO_AL_KHARID_GEM_ROCKS_VIA_LOCATOR = {
+    {
+        action = { teleport = "resourceLocatorRoute", teleportArg = RL_ALT.al_kharid_gem_rocks },
+        desc = "Locator teleport near Al Kharid"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3299, y = 3313}} } },
+        skip_if = { nearCoord = {x = 3299, y = 3313} },
+        desc = "Walk to gem rocks"
+    }
+}
+
+Routes.TO_AL_KHARID_RESOURCE_DUNGEON_VIA_LOCATOR = {
+    {
+        action = { teleport = "resourceLocatorRoute", teleportArg = RL_ALT.al_kharid_resource_dungeon },
+        desc = "Locator teleport near Al Kharid"
+    },
+    {
+        action = { interact = { object = "Mysterious entrance", action = "Enter" } },
+        wait = { region = {x = 18, y = 70, z = 4678}, anim = 0 },
+        timeout = 20,
+        desc = "Enter resource dungeon"
+    }
+}
+
+Routes.TO_RIMMINGTON_MINE_VIA_LOCATOR = {
+    {
+        action = { teleport = "resourceLocatorRoute", teleportArg = RL_ALT.rimmington },
+        desc = "Locator teleport to Rimmington"
+    }
+}
+
+Routes.TO_KARAMJA_VOLCANO_MINE_VIA_LOCATOR = {
+    {
+        action = { teleport = "resourceLocatorRoute", teleportArg = RL_ALT.karamja_volcano },
+        desc = "Locator teleport to Karamja Volcano"
+    }
+}
+
+Routes.TO_DM_RD_DEPOSIT_BOX = {
+    {
+        action = { walk = { waypoints = {{x = 1042, y = 4578}} } },
+        skip_if = { nearCoord = {x = 1042, y = 4578, maxDistance = 10} },
+        desc = "Walk to deposit box"
+    }
+}
+
+Routes.TO_DM_RD_DEPOSIT_BOX_FROM_DM = {
+    {
+        action = { walk = { waypoints = {{x = 3034, y = 9772}} } },
+        skip_if = { nearCoord = {x = 3034, y = 9772} },
+        desc = "Walk to resource dungeon entrance"
+    },
+    {
+        action = { interact = { object = "Mysterious entrance", action = "Enter" } },
+        wait = { coord = {x = 1041, y = 4575}, anim = 0 },
+        timeout = 20,
+        desc = "Enter resource dungeon"
+    },
+    {
+        action = { walk = { waypoints = {{x = 1042, y = 4578}} } },
+        skip_if = { nearCoord = {x = 1042, y = 4578, maxDistance = 10} },
+        desc = "Walk to deposit box"
+    }
+}
+
+Routes.TO_DM_RD_DEPOSIT_BOX_FROM_DM_COAL = {
+    {
+        action = { walk = { waypoints = {{x = 3042, y = 9796}, {x = 3034, y = 9772}} } },
+        skip_if = { nearCoord = {x = 3034, y = 9772} },
+        desc = "Walk to resource dungeon entrance"
+    },
+    {
+        action = { interact = { object = "Mysterious entrance", action = "Enter" } },
+        wait = { coord = {x = 1041, y = 4575}, anim = 0 },
+        timeout = 20,
+        desc = "Enter resource dungeon"
+    },
+    {
+        action = { walk = { waypoints = {{x = 1042, y = 4578}} } },
+        skip_if = { nearCoord = {x = 1042, y = 4578, maxDistance = 10} },
+        desc = "Walk to deposit box"
+    }
+}
+
+Routes.TO_DWARVEN_MINE_FROM_RD = {
+    {
+        action = { interact = { object = "Mysterious door", action = "Exit" } },
+        wait = { region = {x = 47, y = 152, z = 12184}, anim = 0 },
+        timeout = 20,
+        desc = "Exit resource dungeon"
     }
 }
 

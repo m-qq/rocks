@@ -45,9 +45,12 @@ local function isLodestoneUnlocked(lode)
     return API.GetVarbitValue(lode.varbit) == 1
 end
 
+local lodestoneResultBuf = {}
+local capeTeleportBuf = {}
+
 local function isLodestoneNetworkOpen()
-    local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.LODESTONE_NETWORK)
-    return #result > 0 and result[1].textids == "Lodestone Network"
+    lodestoneResultBuf = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.LODESTONE_NETWORK)
+    return #lodestoneResultBuf > 0 and lodestoneResultBuf[1].textids == "Lodestone Network"
 end
 
 local function openLodestoneNetwork()
@@ -197,17 +200,17 @@ local SLAYER_CAPE_ACTIONS = {
     [53839] = {action = 7, route = API.OFF_ACT_GeneralInterface_route2}
 }
 
-function Teleports.slayerCape(destinationKey)
-    local dest = Teleports.SLAYER_DESTINATIONS[destinationKey]
+local function capeTeleport(config)
+    local dest = config.destinations[config.destinationKey]
     if not dest then
-        API.printlua("Unknown Slayer cape destination: " .. tostring(destinationKey), 4, false)
+        API.printlua("Unknown " .. config.capeName .. " destination: " .. tostring(config.destinationKey), 4, false)
         return false
     end
 
-    local capeId = Teleports.getEquippedCape(DATA.SLAYER_CAPE_IDS)
+    local capeId = Teleports.getEquippedCape(config.capeIds)
     local inventorySlot = nil
     if not capeId then
-        for _, id in ipairs(DATA.SLAYER_CAPE_IDS) do
+        for _, id in ipairs(config.capeIds) do
             if Inventory:Contains(id) then
                 local item = Inventory:GetItem(id)
                 capeId = id
@@ -218,24 +221,24 @@ function Teleports.slayerCape(destinationKey)
     end
 
     if not capeId then
-        API.printlua("No Slayer cape found", 4, false)
+        API.printlua("No " .. config.capeName .. " found", 4, false)
         return false
     end
 
     if not waitReadyToTeleport() then return false end
 
-    API.printlua("Using Slayer cape to teleport to " .. dest.name .. "...", 5, false)
+    API.printlua("Using " .. config.capeName .. " to teleport to " .. dest.name .. "...", 0, false)
     if inventorySlot then
-        local params = SLAYER_CAPE_ACTIONS[capeId]
+        local params = config.capeActions[capeId]
         API.DoAction_Interface(0x24, capeId, params.action, 1473, 5, inventorySlot, params.route)
     else
         API.DoAction_Interface(0xffffffff, capeId, 3, 1464, 15, 1, API.OFF_ACT_GeneralInterface_route)
     end
 
     if not Utils.waitOrTerminate(function()
-        local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SLAYER_MASTER_TELEPORT)
-        return #result > 0 and result[1].textids == "Choose a slayer master"
-    end, 10, 100, "Slayer teleport interface did not open") then
+        capeTeleportBuf = API.ScanForInterfaceTest2Get(false, config.menuInterface)
+        return #capeTeleportBuf > 0 and capeTeleportBuf[1].textids == config.menuText
+    end, 10, 100, config.capeName .. " teleport interface did not open") then
         return false
     end
 
@@ -245,12 +248,12 @@ function Teleports.slayerCape(destinationKey)
     end
 
     if not Utils.waitOrTerminate(function()
-        local result = API.ScanForInterfaceTest2Get(false, dest.interface)
-        return #result > 0 and result[1].textids == dest.name
+        capeTeleportBuf = API.ScanForInterfaceTest2Get(false, dest.interface)
+        return #capeTeleportBuf > 0 and capeTeleportBuf[1].textids == dest.name
     end, 10, 100, dest.name .. " option not found") then
-        local result = API.ScanForInterfaceTest2Get(false, dest.interface)
-        if #result > 0 then
-            API.printlua("Found instead: " .. tostring(result[1].textids), 4, false)
+        capeTeleportBuf = API.ScanForInterfaceTest2Get(false, dest.interface)
+        if #capeTeleportBuf > 0 then
+            API.printlua("Found instead: " .. tostring(capeTeleportBuf[1].textids), 4, false)
         else
             API.printlua("No interface results found", 4, false)
         end
@@ -268,8 +271,20 @@ function Teleports.slayerCape(destinationKey)
         return false
     end
     Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Teleport animation did not finish")
-    API.printlua("Slayer cape teleport complete", 0, false)
+    API.printlua(config.capeName .. " teleport complete", 0, false)
     return true
+end
+
+function Teleports.slayerCape(destinationKey)
+    return capeTeleport({
+        destinationKey = destinationKey,
+        destinations = Teleports.SLAYER_DESTINATIONS,
+        capeIds = DATA.SLAYER_CAPE_IDS,
+        capeActions = SLAYER_CAPE_ACTIONS,
+        capeName = "Slayer cape",
+        menuInterface = DATA.INTERFACES.SLAYER_MASTER_TELEPORT,
+        menuText = "Choose a slayer master"
+    })
 end
 
 Teleports.DUNGEONEERING_DESTINATIONS = {
@@ -325,78 +340,15 @@ local DUNGEONEERING_CAPE_ACTIONS = {
 }
 
 function Teleports.dungeoneeringCape(destinationKey)
-    local dest = Teleports.DUNGEONEERING_DESTINATIONS[destinationKey]
-    if not dest then
-        API.printlua("Unknown Dungeoneering cape destination: " .. tostring(destinationKey), 4, false)
-        return false
-    end
-
-    local capeId = Teleports.getEquippedCape(DATA.DUNGEONEERING_CAPE_IDS)
-    local inventorySlot = nil
-    if not capeId then
-        for _, id in ipairs(DATA.DUNGEONEERING_CAPE_IDS) do
-            if Inventory:Contains(id) then
-                local item = Inventory:GetItem(id)
-                capeId = id
-                inventorySlot = item[1].slot
-                break
-            end
-        end
-    end
-
-    if not capeId then
-        API.printlua("No Dungeoneering cape found", 4, false)
-        return false
-    end
-
-    if not waitReadyToTeleport() then return false end
-
-    API.printlua("Using Dungeoneering cape to teleport to " .. dest.name .. "...", 5, false)
-    if inventorySlot then
-        local params = DUNGEONEERING_CAPE_ACTIONS[capeId]
-        API.DoAction_Interface(0x24, capeId, params.action, 1473, 5, inventorySlot, params.route)
-    else
-        API.DoAction_Interface(0xffffffff, capeId, 3, 1464, 15, 1, API.OFF_ACT_GeneralInterface_route)
-    end
-
-    if not Utils.waitOrTerminate(function()
-        local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.DUNGEONEERING_CAPE_TELEPORT)
-        return #result > 0 and result[1].textids == "Where would you like to teleport to?"
-    end, 10, 100, "Dungeoneering cape teleport interface did not open") then
-        return false
-    end
-
-    if dest.pageKey then
-        API.printlua("Navigating to next page...", 0, false)
-        API.KeyboardPress33(dest.pageKey, 0, 100, 50)
-    end
-
-    if not Utils.waitOrTerminate(function()
-        local result = API.ScanForInterfaceTest2Get(false, dest.interface)
-        return #result > 0 and result[1].textids == dest.name
-    end, 10, 100, dest.name .. " option not found") then
-        local result = API.ScanForInterfaceTest2Get(false, dest.interface)
-        if #result > 0 then
-            API.printlua("Found instead: " .. tostring(result[1].textids), 4, false)
-        else
-            API.printlua("No interface results found", 4, false)
-        end
-        return false
-    end
-
-    API.printlua("Selecting " .. dest.name .. "...", 0, false)
-    API.KeyboardPress33(dest.selectKey, 0, 100, 50)
-
-    if not Utils.waitOrTerminate(function()
-        local coord = API.PlayerCoord()
-        local dist = Utils.getDistance(coord.x, coord.y, dest.coord.x, dest.coord.y)
-        return API.ReadPlayerAnim() == 8941 and dist <= 15
-    end, 15, 100, "Failed to teleport to " .. dest.name) then
-        return false
-    end
-    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Teleport animation did not finish")
-    API.printlua("Dungeoneering cape teleport complete", 0, false)
-    return true
+    return capeTeleport({
+        destinationKey = destinationKey,
+        destinations = Teleports.DUNGEONEERING_DESTINATIONS,
+        capeIds = DATA.DUNGEONEERING_CAPE_IDS,
+        capeActions = DUNGEONEERING_CAPE_ACTIONS,
+        capeName = "Dungeoneering cape",
+        menuInterface = DATA.INTERFACES.DUNGEONEERING_CAPE_TELEPORT,
+        menuText = "Where would you like to teleport to?"
+    })
 end
 
 function Teleports.hasArchJournal()
@@ -608,6 +560,234 @@ function Teleports.warsRetreat()
 
     API.printlua("War's Retreat teleport complete", 0, false)
     return true
+end
+
+local RL = DATA.RESOURCE_LOCATOR
+local containerCheckBuf = {0}
+local interfaceResultBuf = {}
+
+local function isLocatorWindowOpen()
+    interfaceResultBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.LOCATOR_WINDOW)
+    return #interfaceResultBuf > 0 and interfaceResultBuf[1].textids == "Resource Locator"
+end
+
+local function isWarningOpen()
+    interfaceResultBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.WARNING)
+    return #interfaceResultBuf > 0 and interfaceResultBuf[1].textids == "Warning! There is a chance that the area may be dangerous."
+end
+
+local function isConfirmDontAskOpen()
+    interfaceResultBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.CONFIRM_DONT_ASK)
+    return #interfaceResultBuf > 0 and interfaceResultBuf[1].textids == "Yes and don't ask me again"
+end
+
+local function isConfirmTravelOpen()
+    interfaceResultBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.CONFIRM_TRAVEL)
+    return #interfaceResultBuf > 0 and interfaceResultBuf[1].textids == "Travel anyway"
+end
+
+-- Find lowest-tier locator supporting ore. Checks equipped (94) then inventory (93).
+function Teleports.scanForLocator(targetOre)
+    for _, locator in ipairs(RL.LOCATORS) do
+        if not targetOre or locator.ores[targetOre] then
+            containerCheckBuf[1] = locator.id
+            if API.Container_Check_Items(94, containerCheckBuf) then
+                return locator, true, nil
+            end
+            if API.Container_Check_Items(93, containerCheckBuf) then
+                local item = Inventory:GetItem(locator.id)
+                local slot = item and item[1] and item[1].slot
+                return locator, false, slot
+            end
+        end
+    end
+    return nil, false, nil
+end
+
+function Teleports.getLocatorCharges(locator, isEquipped)
+    local containerId = isEquipped and 94 or 93
+    local item = API.Container_Get_s(containerId, locator.id)
+    if item and item.Extra_ints and item.Extra_ints[2] then
+        return RL.MAX_CHARGES - (item.Extra_ints[2] / 2)
+    end
+    return RL.MAX_CHARGES
+end
+
+-- Has a locator for this ore with charges > 0. Used by route conditions.
+function Teleports.hasResourceLocator(targetOre)
+    local locator, isEquipped = Teleports.scanForLocator(targetOre)
+    if not locator then return false end
+    return Teleports.getLocatorCharges(locator, isEquipped) > 0
+end
+
+local function doSingleLocatorTeleport(oreKey, locator, isEquipped)
+    if not waitReadyToTeleport() then return false end
+
+    API.printlua("Activating " .. locator.name .. "...", 0, false)
+    if isEquipped then
+        API.DoAction_Interface(0xffffffff, locator.id, 2, 1464, 15, RL.EQUIPMENT_SLOT, API.OFF_ACT_GeneralInterface_route)
+    else
+        API.DoAction_Inventory1(locator.id, 0, 1, API.OFF_ACT_GeneralInterface_route)
+    end
+
+    if not Utils.waitOrTerminate(isLocatorWindowOpen, 10, 100, "Locator window did not open") then
+        return false
+    end
+    API.RandomSleep2(300, 150, 100)
+
+    local dest = RL.DESTINATIONS[oreKey]
+    API.DoAction_Interface(dest.a, dest.b, dest.c, dest.d, dest.e, dest.f, API.OFF_ACT_GeneralInterface_route)
+
+    if not Utils.waitOrTerminate(function()
+        return isWarningOpen() or isConfirmDontAskOpen() or isConfirmTravelOpen()
+            or API.ReadPlayerAnim() == RL.TELEPORT_ANIM
+    end, 10, 100, "No dialog or teleport detected after ore selection") then
+        return false
+    end
+
+    if API.ReadPlayerAnim() ~= RL.TELEPORT_ANIM then
+        if isWarningOpen() then
+            API.KeyboardPress2(0x20, 60, 100)
+            API.RandomSleep2(600, 300, 300)
+            if not Utils.waitOrTerminate(function()
+                return isConfirmDontAskOpen() or isConfirmTravelOpen()
+                    or API.ReadPlayerAnim() == RL.TELEPORT_ANIM
+            end, 10, 100, "No confirmation after warning") then
+                return false
+            end
+        end
+
+        if API.ReadPlayerAnim() ~= RL.TELEPORT_ANIM then
+            if isConfirmDontAskOpen() then
+                API.KeyboardPress2(0x33, 60, 100)
+            elseif isConfirmTravelOpen() then
+                API.KeyboardPress2(0x31, 60, 100)
+            end
+        end
+    end
+
+    if not Utils.waitOrTerminate(function()
+        return API.ReadPlayerAnim() == RL.TELEPORT_ANIM
+    end, 15, 100, "Locator teleport animation did not start") then
+        return false
+    end
+
+    if not Utils.waitOrTerminate(function()
+        return API.ReadPlayerAnim() == 0 and not API.ReadPlayerMovin2()
+    end, 15, 100, "Locator teleport animation did not finish") then
+        return false
+    end
+
+    return true
+end
+
+-- Returns (success, needsRecharge). If expectedCoord is nil, accepts any landing.
+function Teleports.resourceLocator(oreKey, expectedCoord)
+    local locator, isEquipped = Teleports.scanForLocator(oreKey)
+    if not locator then
+        API.printlua("No resource locator found for " .. oreKey, 4, false)
+        return false, false
+    end
+
+    local charges = Teleports.getLocatorCharges(locator, isEquipped)
+    local maxAttempts = expectedCoord and math.floor(charges) or 1
+
+    if maxAttempts <= 0 then
+        API.printlua("Resource locator out of charges", 0, false)
+        return false, true
+    end
+
+    for attempt = 1, maxAttempts do
+        local currentCharges = Teleports.getLocatorCharges(locator, isEquipped)
+        if currentCharges <= 0 then
+            return false, true
+        end
+
+        API.printlua("Locator teleport to " .. oreKey .. " (" .. attempt .. "/" .. maxAttempts .. ", " .. math.floor(currentCharges) .. " charges)", 0, false)
+
+        if not doSingleLocatorTeleport(oreKey, locator, isEquipped) then
+            return false, false
+        end
+
+        local coord = API.PlayerCoord()
+        local landedUnsafe = false
+
+        if oreKey == "adamantite" then
+            if Utils.getDistance(coord.x, coord.y, 3321, 2872) <= RL.MAX_DISTANCE
+                and not Quest:Get(391):isComplete() then
+                API.printlua("Landed at Agility Pyramid but Crocodile Tears quest incomplete, retrying...", 0, false)
+                landedUnsafe = true
+            end
+        end
+
+        if oreKey == "runite" then
+            if Utils.getDistance(coord.x, coord.y, 2860, 9578) <= RL.MAX_DISTANCE then
+                local combatLevel = Utils.getCombatLevel()
+                if combatLevel < 31 then
+                    API.printlua("Landed at Karamja Volcano but combat level " .. combatLevel .. " < 31, retrying...", 0, false)
+                    landedUnsafe = true
+                end
+            end
+        end
+
+        if not expectedCoord and not landedUnsafe then
+            return true, false
+        end
+
+        if not landedUnsafe and expectedCoord then
+            local dist = Utils.getDistance(coord.x, coord.y, expectedCoord.x, expectedCoord.y)
+            if dist <= RL.MAX_DISTANCE then
+                API.printlua("Arrived at expected location (dist: " .. math.floor(dist) .. ")", 0, false)
+                return true, false
+            end
+            API.printlua("Wrong location (dist: " .. math.floor(dist) .. "), retrying...", 0, false)
+        end
+    end
+
+    return false, true
+end
+
+-- Route system wrapper. config = { ore = "silver", coord = { x, y } }
+-- Handles recharging when charges run out during teleport attempts.
+function Teleports.resourceLocatorRoute(config)
+    local maxRechargeAttempts = 5
+
+    for attempt = 1, maxRechargeAttempts do
+        local success, needsRecharge = Teleports.resourceLocator(config.ore, config.coord)
+
+        if success then
+            return true
+        end
+
+        if not needsRecharge then
+            -- Failed for reason other than charges (teleport didn't work)
+            return false
+        end
+
+        -- Out of charges - try to recharge
+        local locator, isEquipped = Teleports.scanForLocator(config.ore)
+        if not locator then
+            return false
+        end
+
+        local energyInInventory = Inventory:GetItemAmount(locator.energyId)
+        if energyInInventory < locator.energyPerCharge then
+            -- Not enough energy for even 1 charge - let travelTo handle fallback
+            API.printlua("Locator out of charges, insufficient energy to recharge (" .. energyInInventory .. "/" .. locator.energyPerCharge .. " needed)", 0, false)
+            return false
+        end
+
+        API.printlua("Recharging locator (attempt " .. attempt .. "/" .. maxRechargeAttempts .. ")...", 0, false)
+        local recharged = Utils.doRechargeDialog(locator, isEquipped)
+        if not recharged then
+            API.printlua("Failed to recharge locator", 4, false)
+            return false
+        end
+
+        API.RandomSleep2(300, 150, 100)
+    end
+
+    return false
 end
 
 return Teleports
