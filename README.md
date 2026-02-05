@@ -1,5 +1,5 @@
 mining some rocks
 
 TODO:
-add more
-fix things
+add more (ask me)
+fix things 
