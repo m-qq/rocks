@@ -281,7 +281,7 @@ local function applyConfigData(saved, c)
     c.locationIndex = resolveIndex(locationKeys, saved.MiningLocation)
     c.bankIndex = resolveIndex(bankKeys, saved.BankingLocation)
     c.staminaPercent = type(saved.StaminaRefreshPercent) == "number"
-        and math.max(50, math.min(100, saved.StaminaRefreshPercent)) or 85
+        and math.max(0, math.min(100, saved.StaminaRefreshPercent)) or 85
     c.threeTickMining = saved.ThreeTickMining == true
     c.useSummoning = type(saved.UseSummoning) == "string" and saved.UseSummoning or "none"
     c.summoningRefreshLocation = type(saved.SummoningRefreshLocation) == "string"
@@ -833,7 +833,7 @@ local function drawConfigTab(cfg, gui)
     local noStamina = ORES[selectedOreKey] and ORES[selectedOreKey].noStamina
     if not noStamina then
         label("Refresh Stamina At")
-        local stamChanged, newStamVal = ImGui.SliderInt("##stamina", cfg.staminaPercent, 50, 100, "%d%%")
+        local stamChanged, newStamVal = ImGui.SliderInt("##stamina", cfg.staminaPercent, 0, 100, "%d%%")
         if stamChanged then cfg.staminaPercent = newStamVal end
     end
 
