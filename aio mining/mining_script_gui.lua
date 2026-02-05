@@ -10,7 +10,7 @@ local Teleports = require("aio mining/mining_teleports")
 local Banking = require("aio mining/mining_banking")
 local MiningGUI = require("aio mining/mining_gui")
 
-local containerCheckBuf = {0}
+local containerCheckBuf = Utils.containerCheckBuf
 
 idleHandler.init()
 
@@ -219,6 +219,20 @@ if ore.isGemRock and cfg.cutAndDrop then
     guiData.metrics.crafting = { level = 0, xpPerHour = 0, levelProgress = 0, ttl = 0, maxLevel = false }
 end
 
+local function computeSkillMetrics(skillName, startSkillXP, elapsed)
+    local currentXP = API.GetSkillXP(skillName)
+    local currentLevel = API.XPLevelTable(currentXP)
+    local xpGained = currentXP - startSkillXP
+    local xpPerHour = elapsed > 0 and (xpGained / elapsed) * 3600 or 0
+    local nextLevelXP = currentLevel < 120 and API.XPForLevel(currentLevel + 1) or 0
+    local currentLevelXP = API.XPForLevel(currentLevel)
+    local xpRemaining = nextLevelXP > 0 and (nextLevelXP - currentXP) or 0
+    local levelRange = nextLevelXP > 0 and (nextLevelXP - currentLevelXP) or 1
+    local levelProgress = nextLevelXP > 0 and ((currentXP - currentLevelXP) / levelRange) or 1
+    local ttl = xpPerHour > 0 and xpRemaining > 0 and (xpRemaining / xpPerHour) * 3600 or 0
+    return currentLevel, xpGained, xpPerHour, xpRemaining, levelProgress, ttl
+end
+
 local function buildGUIData()
     guiData.currentStamina = Utils.getStaminaDrain()
     guiData.maxStamina = Utils.calculateMaxStamina()
@@ -235,17 +249,8 @@ local function buildGUIData()
         guiData.oreBox.capacity = oreBoxCapacity
     end
 
-    local currentXP = API.GetSkillXP("MINING")
-    local currentLevel = API.XPLevelTable(currentXP)
-    local xpGained = currentXP - startXP
     local elapsed = API.ScriptRuntime()
-    local xpPerHour = elapsed > 0 and (xpGained / elapsed) * 3600 or 0
-    local nextLevelXP = currentLevel < 120 and API.XPForLevel(currentLevel + 1) or 0
-    local currentLevelXP = API.XPForLevel(currentLevel)
-    local xpRemaining = nextLevelXP > 0 and (nextLevelXP - currentXP) or 0
-    local levelRange = nextLevelXP > 0 and (nextLevelXP - currentLevelXP) or 1
-    local levelProgress = nextLevelXP > 0 and ((currentXP - currentLevelXP) / levelRange) or 1
-    local ttl = xpPerHour > 0 and xpRemaining > 0 and (xpRemaining / xpPerHour) * 3600 or 0
+    local currentLevel, xpGained, xpPerHour, xpRemaining, levelProgress, ttl = computeSkillMetrics("MINING", startXP, elapsed)
 
     local m = guiData.metrics
     m.currentLevel = currentLevel
@@ -258,16 +263,7 @@ local function buildGUIData()
     m.maxLevel = currentLevel >= 120
 
     if m.crafting then
-        local craftXP = API.GetSkillXP("CRAFTING")
-        local craftLevel = API.XPLevelTable(craftXP)
-        local craftGained = craftXP - startCraftingXP
-        local craftPerHour = elapsed > 0 and (craftGained / elapsed) * 3600 or 0
-        local craftNextXP = craftLevel < 120 and API.XPForLevel(craftLevel + 1) or 0
-        local craftCurXP = API.XPForLevel(craftLevel)
-        local craftRemaining = craftNextXP > 0 and (craftNextXP - craftXP) or 0
-        local craftRange = craftNextXP > 0 and (craftNextXP - craftCurXP) or 1
-        local craftProgress = craftNextXP > 0 and ((craftXP - craftCurXP) / craftRange) or 1
-        local craftTtl = craftPerHour > 0 and craftRemaining > 0 and (craftRemaining / craftPerHour) * 3600 or 0
+        local craftLevel, _, craftPerHour, _, craftProgress, craftTtl = computeSkillMetrics("CRAFTING", startCraftingXP, elapsed)
         m.crafting.level = craftLevel
         m.crafting.xpPerHour = craftPerHour
         m.crafting.levelProgress = craftProgress
@@ -467,7 +463,7 @@ local success, err = pcall(function()
                         state.hasInteracted = true
                     end
                 else
-                    local staminaPercent = Utils.getStaminaPercent()
+                    local staminaPercent = Utils.getStaminaDrainPercent()
                     local miningInProgress = API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS) > 0
                     if not state.hasInteracted or state.miningLevel < 15 or not miningInProgress or staminaPercent >= cfg.staminaRefreshPercent then
                         state.currentState = "Mining"

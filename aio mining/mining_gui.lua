@@ -31,7 +31,7 @@ local cachedGemFormatterPgc = -1
 function MiningGUI.reset()
     MiningGUI.open = true
     MiningGUI.started = false
-    MiningGUI.warnings = {}
+    Utils.clearTable(MiningGUI.warnings)
     MiningGUI.selectConfigTab = true
     MiningGUI.selectWarningsTab = false
     MiningGUI.selectInfoTab = false
@@ -53,7 +53,7 @@ function MiningGUI.addWarning(msg)
 end
 
 function MiningGUI.clearWarnings()
-    MiningGUI.warnings = {}
+    Utils.clearTable(MiningGUI.warnings)
 end
 
 local function buildSortedList(tbl, nameField)
@@ -114,7 +114,7 @@ local function findKeyIndex(keys, key)
     return -1
 end
 
-local PRESETS_FILE = os.getenv("USERPROFILE") .. "\\MemoryError\\Lua_Scripts\\aio mining\\mining_presets.json"
+local PRESETS_FILE = (os.getenv("USERPROFILE") or ".") .. "\\MemoryError\\Lua_Scripts\\aio mining\\mining_presets.json"
 
 local presetsCache = nil
 local presetNamesCache = nil
@@ -340,7 +340,7 @@ function MiningGUI.resetConfig()
     c.useSummoning = "none"
     c.summoningRefreshLocation = "wars_retreat"
     c.bankPin = ""
-    MiningGUI.warnings = {}
+    Utils.clearTable(MiningGUI.warnings)
     MiningGUI._filteredLocNames = nil
     MiningGUI._filteredLocMapping = nil
     MiningGUI._familiarKeys = nil
@@ -352,7 +352,7 @@ end
 function MiningGUI.loadPreset(presetName)
     local saved = loadPresetFromFile(presetName)
     if not saved then return false end
-    MiningGUI.warnings = {}
+    Utils.clearTable(MiningGUI.warnings)
     applyConfigData(saved, MiningGUI.config)
     MiningGUI._filteredLocNames = nil
     MiningGUI._filteredLocMapping = nil
@@ -1057,7 +1057,7 @@ local function drawWarningsTab(gui)
     ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.45, 0.45, 0.48, 1.0)
     ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.5, 0.5, 0.52, 1.0)
     if ImGui.Button("Dismiss##clear", -1, 24) then
-        gui.warnings = {}
+        Utils.clearTable(gui.warnings)
     end
     ImGui.PopStyleColor(3)
 end

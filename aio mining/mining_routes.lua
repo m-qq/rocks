@@ -10,7 +10,6 @@ Routes.useLocator = false
 -- Reusable single-element buffers for GetAllObjArray1 calls
 local objIdBuf = {0}
 local objTypeBuf = {0}
-local interfaceScanBuf = {}
 
 local function checkWaitCondition(wait)
     local coord = API.PlayerCoord()
@@ -22,8 +21,7 @@ local function checkWaitCondition(wait)
     end
 
     if wait.nearCoord then
-        local dist = Utils.getDistance(coord.x, coord.y, wait.nearCoord.x, wait.nearCoord.y)
-        if dist > (wait.nearCoord.maxDistance or 10) then
+        if not Utils.isWithinDistance(coord.x, coord.y, wait.nearCoord.x, wait.nearCoord.y, wait.nearCoord.maxDistance or 10) then
             return false
         end
     end
@@ -45,8 +43,7 @@ local function checkWaitCondition(wait)
         objTypeBuf[1] = wait.nearObject.type or 12
         local objects = API.GetAllObjArray1(objIdBuf, 50, objTypeBuf)
         if #objects == 0 then return false end
-        local dist = Utils.getDistance(coord.x, coord.y, objects[1].Tile_XYZ.x, objects[1].Tile_XYZ.y)
-        if dist > wait.nearObject.maxDistance then
+        if not Utils.isWithinDistance(coord.x, coord.y, objects[1].Tile_XYZ.x, objects[1].Tile_XYZ.y, wait.nearObject.maxDistance) then
             return false
         end
     end
@@ -74,8 +71,7 @@ local function checkWaitCondition(wait)
     end
 
     if wait.interface then
-        interfaceScanBuf = API.ScanForInterfaceTest2Get(false, wait.interface.ids)
-        if #interfaceScanBuf == 0 or interfaceScanBuf[1].textids ~= wait.interface.text then
+        if not Utils.checkInterfaceText(wait.interface.ids, wait.interface.text) then
             return false
         end
     end
@@ -89,16 +85,14 @@ local function shouldSkipStep(skip_if)
     local coord = API.PlayerCoord()
 
     if skip_if.nearCoord then
-        local dist = Utils.getDistance(coord.x, coord.y, skip_if.nearCoord.x, skip_if.nearCoord.y)
-        if dist <= (skip_if.nearCoord.maxDistance or 40) then
+        if Utils.isWithinDistance(coord.x, coord.y, skip_if.nearCoord.x, skip_if.nearCoord.y, skip_if.nearCoord.maxDistance or 40) then
             return true
         end
     end
 
     if skip_if.nearCoords then
         for _, nc in ipairs(skip_if.nearCoords) do
-            local dist = Utils.getDistance(coord.x, coord.y, nc.x, nc.y)
-            if dist <= (nc.maxDistance or 40) then
+            if Utils.isWithinDistance(coord.x, coord.y, nc.x, nc.y, nc.maxDistance or 40) then
                 return true
             end
         end
@@ -152,46 +146,46 @@ function Routes.executeStep(step)
     if step.wait then
         if step.retryAction and step.action and step.action.interact then
             local timeout = step.timeout or 20
-            local startTime = os.time()
-            while os.time() - startTime < timeout do
+            local startTime = os.clock()
+            while os.clock() - startTime < timeout do
                 if checkWaitCondition(step.wait) then
                     return true
                 end
 
                 if step.retryOnAnim then
                     -- Pattern: interact, wait for success coord OR fail anim, retry on fail
-                    while os.time() - startTime < timeout do
+                    while os.clock() - startTime < timeout do
                         if checkWaitCondition(step.wait) then
                             return true
                         end
                         if API.ReadPlayerAnim() == step.retryOnAnim then
                             API.printlua("Route: Failed attempt, retrying...", 0, false)
-                            while os.time() - startTime < timeout do
+                            while os.clock() - startTime < timeout do
                                 if API.ReadPlayerAnim() == 0 then break end
                                 API.RandomSleep2(100, 50, 50)
                             end
-                            startTime = os.time()
+                            startTime = os.clock()
                             break
                         end
                         API.RandomSleep2(100, 50, 50)
                     end
-                    if os.time() - startTime < timeout then
+                    if os.clock() - startTime < timeout then
                         local i = step.action.interact
                         Interact:Object(i.object, i.action, i.tile, i.range or 40)
                     end
                 else
                     -- Pattern: interact, wait for objectState change or anim cycle
-                    local waitStart = os.time()
-                    while os.time() - startTime < timeout do
+                    local waitStart = os.clock()
+                    while os.clock() - startTime < timeout do
                         if checkWaitCondition(step.wait) then
                             return true
                         end
-                        if os.time() - waitStart >= 3 and API.ReadPlayerAnim() == 0 then
+                        if os.clock() - waitStart >= 3 and API.ReadPlayerAnim() == 0 then
                             break
                         end
                         API.RandomSleep2(100, 50, 50)
                     end
-                    if os.time() - startTime < timeout then
+                    if os.clock() - startTime < timeout then
                         local i = step.action.interact
                         Interact:Object(i.object, i.action, i.tile, i.range or 40)
                     end
@@ -230,7 +224,7 @@ end
 local lodestoneWarned = {}
 
 function Routes.resetState()
-    lodestoneWarned = {}
+    Utils.clearTable(lodestoneWarned)
 end
 
 function Routes.checkLodestones(route)
@@ -300,8 +294,7 @@ local function isAtDestination(destination, selectedOre)
 
     local oreCoord = destination.oreCoords[selectedOre]
     local playerCoord = API.PlayerCoord()
-    local distance = Utils.getDistance(playerCoord.x, playerCoord.y, oreCoord.x, oreCoord.y)
-    return distance <= 20
+    return Utils.isWithinDistance(playerCoord.x, playerCoord.y, oreCoord.x, oreCoord.y, 20)
 end
 
 function Routes.selectRoute(destination, fromLocationKey)
@@ -338,8 +331,7 @@ function Routes.selectRoute(destination, fromLocationKey)
                 return option.route
             end
         elseif option.condition.nearCoord then
-            local dist = Utils.getDistance(coord.x, coord.y, option.condition.nearCoord.x, option.condition.nearCoord.y)
-            if dist <= (option.condition.nearCoord.maxDistance or 40) then
+            if Utils.isWithinDistance(coord.x, coord.y, option.condition.nearCoord.x, option.condition.nearCoord.y, option.condition.nearCoord.maxDistance or 40) then
                 return option.route
             end
         elseif option.condition.region and Utils.isAtRegion(option.condition.region) then

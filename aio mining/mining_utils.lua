@@ -1,14 +1,15 @@
 local API = require("api")
 local DATA = require("aio mining/mining_data")
+local ORES = require("aio mining/mining_ores")
 
 local Utils = {}
 
 -- Reusable single-element buffers to avoid throwaway table allocations
 local containerCheckBuf = {0}
+Utils.containerCheckBuf = containerCheckBuf
 local objIdBuf = {0}
 local objTypeBuf = {0}
 local rockertunityTypeBuf = {4}
-local interfaceScanBuf = {}
 
 -- Static lookup table for gem cutting
 local gemCutMap = {
@@ -36,8 +37,8 @@ end
 local function waitForCondition(condition, timeout, checkInterval)
     timeout = timeout or 10
     checkInterval = checkInterval or 50
-    local startTime = os.time()
-    while os.difftime(os.time(), startTime) < timeout and API.Read_LoopyLoop() do
+    local startTime = os.clock()
+    while (os.clock() - startTime) < timeout and API.Read_LoopyLoop() do
         if condition() then return true end
         API.RandomSleep2(checkInterval, 50, 0)
     end
@@ -64,6 +65,26 @@ function Utils.getDistance(x1, y1, x2, y2)
     return math.sqrt((x2 - x1)^2 + (y2 - y1)^2)
 end
 
+function Utils.isWithinDistance(x1, y1, x2, y2, threshold)
+    return (x2 - x1)^2 + (y2 - y1)^2 <= threshold * threshold
+end
+
+function Utils.clearTable(t)
+    for k in pairs(t) do
+        t[k] = nil
+    end
+end
+
+function Utils.checkInterfaceText(interfacePath, expectedText)
+    local result = API.ScanForInterfaceTest2Get(false, interfacePath)
+    return #result > 0 and result[1].textids == expectedText
+end
+
+function Utils.waitForAnimCycle(label)
+    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() > 0 end, 10, 100, label .. " animation did not start")
+    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, label .. " animation did not finish")
+end
+
 function Utils.formatTime(seconds)
     if seconds < 0 then return "0:00" end
     local mins = math.floor(seconds / 60)
@@ -81,24 +102,24 @@ local function walkToWaypoint(waypoint, threshold, waypointIndex)
 
     API.DoAction_WalkerW(WPOINT.new(randomX, randomY, 0))
 
-    local absoluteStart = os.time()
-    local lastMovementTime = os.time()
+    local absoluteStart = os.clock()
+    local lastMovementTime = os.clock()
 
     while API.Read_LoopyLoop() do
         local coord = API.PlayerCoord()
-        if Utils.getDistance(coord.x, coord.y, waypoint.x, waypoint.y) <= threshold then
+        if Utils.isWithinDistance(coord.x, coord.y, waypoint.x, waypoint.y, threshold) then
             return true
         end
 
-        if os.difftime(os.time(), absoluteStart) >= maxTimeout then
+        if (os.clock() - absoluteStart) >= maxTimeout then
             local idx = waypointIndex and (" at waypoint " .. waypointIndex) or ""
             API.printlua("Walk timed out" .. idx, 4, false)
             return false
         end
 
         if API.ReadPlayerMovin2() then
-            lastMovementTime = os.time()
-        elseif os.difftime(os.time(), lastMovementTime) >= stuckTimeout then
+            lastMovementTime = os.clock()
+        elseif (os.clock() - lastMovementTime) >= stuckTimeout then
             local idx = waypointIndex and (" at waypoint " .. waypointIndex) or ""
             API.printlua("Player stuck" .. idx, 4, false)
             return false
@@ -231,7 +252,7 @@ function Utils.getStaminaDrain()
     return API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS)
 end
 
-function Utils.getStaminaPercent()
+function Utils.getStaminaDrainPercent()
     local max = Utils.calculateMaxStamina()
     if max == 0 then return 0 end
     return (Utils.getStaminaDrain() / max) * 100
@@ -450,8 +471,8 @@ function Utils.validateBankReachability(selectedBankingLocation)
 end
 
 function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankingLocation, playerOreBox, useOreBox, skipBanking)
+    -- Lazy requires: these modules depend on mining_utils, so require at call time to avoid circular loads
     local LOCATIONS = require("aio mining/mining_locations")
-    local ORES = require("aio mining/mining_ores")
     local Banking = require("aio mining/mining_banking")
     local Routes = require("aio mining/mining_routes")
     local Teleports = require("aio mining/mining_teleports")
@@ -597,6 +618,9 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
 end
 
 local cachedRocks = nil
+local cachedRockertunityResult = { id = 0, x = 0, y = 0 }
+local hasRockertunityResult = false
+local lastRockertunityTime = 0
 
 function Utils.scanRocks(oreConfig)
     local targetRocks = API.ReadAllObjectsArray({0, 12}, {-1}, {oreConfig.name})
@@ -733,9 +757,9 @@ end
 
 
 function Utils.getSummoningPoints()
-    interfaceScanBuf = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_POINTS)
-    if interfaceScanBuf and interfaceScanBuf[1] and interfaceScanBuf[1].textids then
-        local current, max = interfaceScanBuf[1].textids:match("^(%d+)/(%d+)$")
+    local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_POINTS)
+    if result and result[1] and result[1].textids then
+        local current, max = result[1].textids:match("^(%d+)/(%d+)$")
         if current then
             return tonumber(current), tonumber(max)
         end
@@ -744,9 +768,9 @@ function Utils.getSummoningPoints()
 end
 
 function Utils.isFamiliarActive(familiarDef)
-    interfaceScanBuf = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_FAMILIAR)
-    if interfaceScanBuf and interfaceScanBuf[1] and interfaceScanBuf[1].textids then
-        return interfaceScanBuf[1].textids:lower() == familiarDef.name:lower()
+    local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_FAMILIAR)
+    if result and result[1] and result[1].textids then
+        return result[1].textids:lower() == familiarDef.name:lower()
     end
     return false
 end
@@ -783,8 +807,8 @@ function Utils.summonFamiliar(familiarDef)
 
     local expectedName = familiarDef.name:lower()
     if not waitForCondition(function()
-        interfaceScanBuf = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_FAMILIAR)
-        return interfaceScanBuf and interfaceScanBuf[1] and interfaceScanBuf[1].textids and interfaceScanBuf[1].textids:lower() == expectedName
+        local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_FAMILIAR)
+        return result and result[1] and result[1].textids and result[1].textids:lower() == expectedName
     end, 10, 100) then
         API.printlua("Failed to confirm familiar was summoned", 4, false)
         return false
@@ -938,9 +962,9 @@ end
 local RL = DATA.RESOURCE_LOCATOR
 
 local function isRechargeDialogOpen()
-    interfaceScanBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.RECHARGE_DIALOG)
-    if #interfaceScanBuf > 0 and interfaceScanBuf[1].textids then
-        return interfaceScanBuf[1].textids:find("how many charges do you wish to add") ~= nil, interfaceScanBuf[1].textids
+    local result = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.RECHARGE_DIALOG)
+    if #result > 0 and result[1].textids then
+        return result[1].textids:find("how many charges do you wish to add") ~= nil, result[1].textids
     end
     return false, nil
 end
@@ -998,8 +1022,8 @@ function Utils.doRechargeDialog(locator, isEquipped)
     API.RandomSleep2(600, 300, 300)
 
     if not waitForCondition(function()
-        interfaceScanBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.RECHARGE_CONFIRM)
-        return #interfaceScanBuf > 0 and interfaceScanBuf[1].textids and interfaceScanBuf[1].textids:find("This will add")
+        local result = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.RECHARGE_CONFIRM)
+        return #result > 0 and result[1].textids and result[1].textids:find("This will add")
     end, 10, 100) then
         API.printlua("Recharge confirmation dialog did not appear", 4, false)
         return false, false
@@ -1008,8 +1032,8 @@ function Utils.doRechargeDialog(locator, isEquipped)
     API.RandomSleep2(600, 300, 300)
 
     if not waitForCondition(function()
-        interfaceScanBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.RECHARGE_CONFIRM2)
-        return #interfaceScanBuf > 0 and interfaceScanBuf[1].textids and interfaceScanBuf[1].textids:find("energy to add")
+        local result = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.RECHARGE_CONFIRM2)
+        return #result > 0 and result[1].textids and result[1].textids:find("energy to add")
     end, 10, 100) then
         API.printlua("Second recharge confirmation did not appear", 4, false)
         return false, false
@@ -1040,14 +1064,14 @@ local lastNonZeroAnimTime = 0
 
 function Utils.isRecentlyActive(state)
     if API.ReadPlayerAnim() ~= 0 then
-        lastNonZeroAnimTime = os.time()
+        lastNonZeroAnimTime = os.clock()
         return true
     end
-    return os.difftime(os.time(), lastNonZeroAnimTime) < 10
+    return (os.clock() - lastNonZeroAnimTime) < 10
 end
 
 function Utils.canInteract(state)
-    return os.time() - state.lastInteractTime >= 3
+    return os.clock() - state.lastInteractTime >= 3
 end
 
 function Utils.shouldThreeTick(cfg, state)
@@ -1064,10 +1088,6 @@ function Utils.shouldThreeTick(cfg, state)
 
     return ticksSinceLastInteract >= state.nextTickTarget
 end
-
-local cachedRockertunityResult = { id = 0, x = 0, y = 0 }
-local hasRockertunityResult = false
-local lastRockertunityTime = 0
 
 function Utils.findRockertunity(oreConfig)
     if not cachedRocks or #cachedRocks == 0 then return nil end
@@ -1106,13 +1126,12 @@ function Utils.mineRockertunity(oreConfig, rockTarget, state)
 
     local tile = WPOINT.new(rockTarget.x, rockTarget.y, 0)
     API.DoAction_Object2(0x3a, API.OFF_ACT_GeneralObject_route0, {rockTarget.id}, 40, tile)
-    state.lastInteractTime = os.time()
+    state.lastInteractTime = os.clock()
 
     local function isGone()
         local rockertunities = API.GetAllObjArray1(DATA.ROCKERTUNITY_IDS, 20, rockertunityTypeBuf)
         for _, rockertunity in ipairs(rockertunities) do
-            local distance = Utils.getDistance(rockTarget.x, rockTarget.y, rockertunity.Tile_XYZ.x, rockertunity.Tile_XYZ.y)
-            if distance <= math.sqrt(2) then
+            if Utils.isWithinDistance(rockTarget.x, rockTarget.y, rockertunity.Tile_XYZ.x, rockertunity.Tile_XYZ.y, 1.42) then
                 return false
             end
         end
@@ -1134,8 +1153,7 @@ function Utils.isNearOreLocation(loc, selectedOre)
 
     local oreCoord = loc.oreCoords[selectedOre]
     local playerCoord = API.PlayerCoord()
-    local distance = Utils.getDistance(playerCoord.x, playerCoord.y, oreCoord.x, oreCoord.y)
-    return distance <= 20
+    return Utils.isWithinDistance(playerCoord.x, playerCoord.y, oreCoord.x, oreCoord.y, 20)
 end
 
 function Utils.mineRock(oreConfig, state)
@@ -1150,8 +1168,8 @@ function Utils.mineRock(oreConfig, state)
     if not Utils.waitOrTerminate(function() return Utils.isMiningActive(state) or Inventory:IsFull() end, 30, 50, "Failed to start mining") then
         return false
     end
-    state.lastInteractTime = os.time()
-    lastNonZeroAnimTime = os.time()
+    state.lastInteractTime = os.clock()
+    lastNonZeroAnimTime = os.clock()
     API.RandomSleep2(300, 150, 100)
     return true
 end
@@ -1257,8 +1275,8 @@ function Utils.dropItemById(oreId, displayName, useHotkey)
             API.printlua("Found hotkey " .. oreAB.hotkey .. " - holding to drop all", 0, false)
             API.KeyboardDown(oreAB.hotkey)
 
-            local dropStartTime = os.time()
-            while Inventory:GetItemAmount(oreId) > 0 and os.difftime(os.time(), dropStartTime) < 15 do
+            local dropStartTime = os.clock()
+            while Inventory:GetItemAmount(oreId) > 0 and (os.clock() - dropStartTime) < 15 do
                 API.printlua("Dropping... " .. Inventory:GetItemAmount(oreId) .. " remaining", 0, false)
                 API.RandomSleep2(300, 100, 100)
             end
@@ -1328,8 +1346,7 @@ function Utils.dropAllOres(ore, state)
 end
 
 function Utils.isGemCuttingInterfaceOpen()
-    interfaceScanBuf = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.GEM_CUTTING)
-    return interfaceScanBuf[1] and interfaceScanBuf[1].textids == "Gem Cutting"
+    return Utils.checkInterfaceText(DATA.INTERFACES.GEM_CUTTING, "Gem Cutting")
 end
 
 function Utils.cutGemType(gemId, gemName, cutName)

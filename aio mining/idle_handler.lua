@@ -31,8 +31,14 @@ function idleHandler.getTimeUntilNextIdle()
     return math.max(0, idleHandler.randomTime - elapsed)
 end
 
+local lastGCTime = 0
+
 function idleHandler.collectGarbage()
-    collectgarbage("step", 500)
+    local now = os.clock()
+    if now - lastGCTime >= 5 then
+        collectgarbage("step", 500)
+        lastGCTime = now
+    end
 end
 
 return idleHandler

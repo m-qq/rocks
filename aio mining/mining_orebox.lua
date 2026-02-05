@@ -22,12 +22,21 @@ local function areAllVarbitsComplete(varbitTable)
     return true
 end
 
+local cachedOresomeComplete = nil
+local cachedStillOresomeComplete = nil
+
 function OreBox.isOresomeComplete()
-    return areAllVarbitsComplete(DATA.VARBIT_IDS.ORESOME)
+    if cachedOresomeComplete == nil then
+        cachedOresomeComplete = areAllVarbitsComplete(DATA.VARBIT_IDS.ORESOME)
+    end
+    return cachedOresomeComplete
 end
 
 function OreBox.isStillOresomeComplete()
-    return areAllVarbitsComplete(DATA.VARBIT_IDS.STILL_ORESOME)
+    if cachedStillOresomeComplete == nil then
+        cachedStillOresomeComplete = areAllVarbitsComplete(DATA.VARBIT_IDS.STILL_ORESOME)
+    end
+    return cachedStillOresomeComplete
 end
 
 function OreBox.getCapacity(boxId, oreConfig)

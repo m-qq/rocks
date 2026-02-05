@@ -6,9 +6,6 @@ local Routes = require("aio mining/mining_routes")
 
 local Banking = {}
 
--- Reusable buffer for interface scans
-local interfaceScanBuf = {}
-
 Banking.fallbackBank = nil
 
 function Banking.closeBank()
@@ -26,7 +23,7 @@ local BANK_PIN_INTERFACE = { { 13,0,-1,0 }, { 13,25,-1,0 }, { 13,25,14,0 } }
 local staticKeepItems = {
     [DATA.ARCH_JOURNAL_ID] = true,
     [DATA.RING_OF_KINSHIP_ID] = true,
-    [39018] = true
+    [DATA.SENNTISTEN_SCROLL_ID] = true
 }
 for _, id in ipairs(DATA.SLAYER_CAPE_IDS) do
     staticKeepItems[id] = true
@@ -47,26 +44,28 @@ for id in pairs(DATA.ALL_ENERGY_IDS) do
     staticKeepItems[id] = true
 end
 
-local containerCheckBuf = {0}
+local containerCheckBuf = Utils.containerCheckBuf
 
 local bankCache = {}
 local bankCachePopulated = false
+local notedModeDisabled = false
+
+local function cacheBankItems(idSet)
+    for id in pairs(idSet) do
+        local bankItem = API.Container_Get_s(95, id)
+        bankCache[id] = bankItem and bankItem.item_stack or 0
+    end
+end
 
 local function populateBankCache()
     if bankCachePopulated then return end
-    for id in pairs(DATA.ALL_JUJU_IDS) do
-        local bankItem = API.Container_Get_s(95, id)
-        bankCache[id] = bankItem and bankItem.item_stack or 0
-    end
-    for id in pairs(DATA.ALL_SUMMONING_POUCH_IDS) do
-        local bankItem = API.Container_Get_s(95, id)
-        bankCache[id] = bankItem and bankItem.item_stack or 0
-    end
+    cacheBankItems(DATA.ALL_JUJU_IDS)
+    cacheBankItems(DATA.ALL_SUMMONING_POUCH_IDS)
     bankCachePopulated = true
 end
 
 function Banking.resetCache()
-    bankCache = {}
+    Utils.clearTable(bankCache)
     bankCachePopulated = false
 end
 
@@ -252,11 +251,11 @@ local function depositItem(itemId, itemName)
 end
 
 local function isBankPinOpen()
-    interfaceScanBuf = API.ScanForInterfaceTest2Get(false, BANK_PIN_INTERFACE)
-    return #interfaceScanBuf > 0 and interfaceScanBuf[1].textids == "Bank of Gielinor"
+    return Utils.checkInterfaceText(BANK_PIN_INTERFACE, "Bank of Gielinor")
 end
 
 function Banking.openBank(bankLocation, bankPin)
+    notedModeDisabled = false
     if not bankLocation or not bankLocation.bank then
         API.printlua("No bank config defined for location", 4, false)
         return false
@@ -426,6 +425,7 @@ local function findBestJujuInBank(potionDef)
 end
 
 local function disableNotedMode()
+    if notedModeDisabled then return true end
     local vb = API.VB_FindPSettinOrder(160)
     if vb and vb.state == 1 then
         API.printlua("Disabling noted withdraw mode...", 0, false)
@@ -437,6 +437,7 @@ local function disableNotedMode()
             return false
         end
     end
+    notedModeDisabled = true
     return true
 end
 
@@ -659,7 +660,7 @@ function Banking.performBanking(config)
             if bankLocation.depositBox and miningLocation.oreCoords and miningLocation.oreCoords[selectedOre] then
                 local oreCoord = miningLocation.oreCoords[selectedOre]
                 local coord = API.PlayerCoord()
-                if Utils.getDistance(coord.x, coord.y, oreCoord.x, oreCoord.y) <= 35 then
+                if Utils.isWithinDistance(coord.x, coord.y, oreCoord.x, oreCoord.y, 35) then
                     skipWalk = true
                 end
             end

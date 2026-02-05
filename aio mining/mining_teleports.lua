@@ -37,7 +37,7 @@ Teleports.LODESTONES = {
 
 local function isAtLodestone(lode)
     local playerLoc = API.PlayerCoord()
-    return Utils.getDistance(playerLoc.x, playerLoc.y, lode.loc.x, lode.loc.y) <= 20
+    return Utils.isWithinDistance(playerLoc.x, playerLoc.y, lode.loc.x, lode.loc.y, 20)
 end
 
 local function isLodestoneUnlocked(lode)
@@ -45,12 +45,8 @@ local function isLodestoneUnlocked(lode)
     return API.GetVarbitValue(lode.varbit) == 1
 end
 
-local lodestoneResultBuf = {}
-local capeTeleportBuf = {}
-
 local function isLodestoneNetworkOpen()
-    lodestoneResultBuf = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.LODESTONE_NETWORK)
-    return #lodestoneResultBuf > 0 and lodestoneResultBuf[1].textids == "Lodestone Network"
+    return Utils.checkInterfaceText(DATA.INTERFACES.LODESTONE_NETWORK, "Lodestone Network")
 end
 
 local function openLodestoneNetwork()
@@ -139,8 +135,7 @@ function Teleports.lodestone(lode)
     end, 20, 100, "Failed to teleport to " .. lode.name .. " lodestone") then
         return false
     end
-    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() > 0 end, 10, 100, "Teleport animation did not start")
-    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Teleport animation did not finish")
+    Utils.waitForAnimCycle("Teleport")
     API.printlua("Teleport complete", 0, false)
     API.RandomSleep2(600, 300, 50)
     return true
@@ -236,8 +231,7 @@ local function capeTeleport(config)
     end
 
     if not Utils.waitOrTerminate(function()
-        capeTeleportBuf = API.ScanForInterfaceTest2Get(false, config.menuInterface)
-        return #capeTeleportBuf > 0 and capeTeleportBuf[1].textids == config.menuText
+        return Utils.checkInterfaceText(config.menuInterface, config.menuText)
     end, 10, 100, config.capeName .. " teleport interface did not open") then
         return false
     end
@@ -248,12 +242,11 @@ local function capeTeleport(config)
     end
 
     if not Utils.waitOrTerminate(function()
-        capeTeleportBuf = API.ScanForInterfaceTest2Get(false, dest.interface)
-        return #capeTeleportBuf > 0 and capeTeleportBuf[1].textids == dest.name
+        return Utils.checkInterfaceText(dest.interface, dest.name)
     end, 10, 100, dest.name .. " option not found") then
-        capeTeleportBuf = API.ScanForInterfaceTest2Get(false, dest.interface)
-        if #capeTeleportBuf > 0 then
-            API.printlua("Found instead: " .. tostring(capeTeleportBuf[1].textids), 4, false)
+        local result = API.ScanForInterfaceTest2Get(false, dest.interface)
+        if #result > 0 then
+            API.printlua("Found instead: " .. tostring(result[1].textids), 4, false)
         else
             API.printlua("No interface results found", 4, false)
         end
@@ -265,8 +258,7 @@ local function capeTeleport(config)
 
     if not Utils.waitOrTerminate(function()
         local coord = API.PlayerCoord()
-        local dist = Utils.getDistance(coord.x, coord.y, dest.coord.x, dest.coord.y)
-        return API.ReadPlayerAnim() == 8941 and dist <= 15
+        return API.ReadPlayerAnim() == 8941 and Utils.isWithinDistance(coord.x, coord.y, dest.coord.x, dest.coord.y, 15)
     end, 15, 100, "Failed to teleport to " .. dest.name) then
         return false
     end
@@ -378,17 +370,14 @@ function Teleports.ringOfKinship()
         API.DoAction_Inventory1(DATA.RING_OF_KINSHIP_ID, 0, 3, API.OFF_ACT_GeneralInterface_route)
     end
 
-    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() > 0 end, 10, 100, "Teleport animation did not start")
-    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Teleport animation did not finish")
+    Utils.waitForAnimCycle("Teleport")
     if not Utils.waitOrTerminate(function()
         local coord = API.PlayerCoord()
-        local dist = Utils.getDistance(coord.x, coord.y, 3449, 3696)
-        return dist <= 10
+        return Utils.isWithinDistance(coord.x, coord.y, 3449, 3696, 10)
     end, 15, 100, "Failed to teleport to Daemonheim") then
         return false
     end
-    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() > 0 end, 10, 100, "Second teleport animation did not start")
-    Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, "Second teleport animation did not finish")
+    Utils.waitForAnimCycle("Second teleport")
     API.printlua("Teleport complete", 0, false)
     API.RandomSleep2(600, 300, 50)
     return true
@@ -420,8 +409,7 @@ function Teleports.archJournal()
     API.RandomSleep2(600, 300, 300)
     return Utils.waitOrTerminate(function()
         local coord = API.PlayerCoord()
-        local dist = Utils.getDistance(coord.x, coord.y, 3336, 3378)
-        return dist <= 10 and API.ReadPlayerAnim() == 0
+        return Utils.isWithinDistance(coord.x, coord.y, 3336, 3378, 10) and API.ReadPlayerAnim() == 0
     end, 15, 100, "Failed to teleport to Archaeology Campus")
 end
 
@@ -454,8 +442,7 @@ function Teleports.memoryStrand()
     API.RandomSleep2(600, 300, 300)
     return Utils.waitOrTerminate(function()
         local coord = API.PlayerCoord()
-        local dist = Utils.getDistance(coord.x, coord.y, 2292, 3553)
-        return dist <= 10 and API.ReadPlayerAnim() == 0
+        return Utils.isWithinDistance(coord.x, coord.y, 2292, 3553, 10) and API.ReadPlayerAnim() == 0
     end, 15, 100, "Failed to teleport to Memorial to Guthix")
 end
 
@@ -563,27 +550,22 @@ function Teleports.warsRetreat()
 end
 
 local RL = DATA.RESOURCE_LOCATOR
-local containerCheckBuf = {0}
-local interfaceResultBuf = {}
+local containerCheckBuf = Utils.containerCheckBuf
 
 local function isLocatorWindowOpen()
-    interfaceResultBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.LOCATOR_WINDOW)
-    return #interfaceResultBuf > 0 and interfaceResultBuf[1].textids == "Resource Locator"
+    return Utils.checkInterfaceText(RL.INTERFACES.LOCATOR_WINDOW, "Resource Locator")
 end
 
 local function isWarningOpen()
-    interfaceResultBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.WARNING)
-    return #interfaceResultBuf > 0 and interfaceResultBuf[1].textids == "Warning! There is a chance that the area may be dangerous."
+    return Utils.checkInterfaceText(RL.INTERFACES.WARNING, "Warning! There is a chance that the area may be dangerous.")
 end
 
 local function isConfirmDontAskOpen()
-    interfaceResultBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.CONFIRM_DONT_ASK)
-    return #interfaceResultBuf > 0 and interfaceResultBuf[1].textids == "Yes and don't ask me again"
+    return Utils.checkInterfaceText(RL.INTERFACES.CONFIRM_DONT_ASK, "Yes and don't ask me again")
 end
 
 local function isConfirmTravelOpen()
-    interfaceResultBuf = API.ScanForInterfaceTest2Get(false, RL.INTERFACES.CONFIRM_TRAVEL)
-    return #interfaceResultBuf > 0 and interfaceResultBuf[1].textids == "Travel anyway"
+    return Utils.checkInterfaceText(RL.INTERFACES.CONFIRM_TRAVEL, "Travel anyway")
 end
 
 -- Find lowest-tier locator supporting ore. Checks equipped (94) then inventory (93).
@@ -713,7 +695,7 @@ function Teleports.resourceLocator(oreKey, expectedCoord)
         local landedUnsafe = false
 
         if oreKey == "adamantite" then
-            if Utils.getDistance(coord.x, coord.y, 3321, 2872) <= RL.MAX_DISTANCE
+            if Utils.isWithinDistance(coord.x, coord.y, 3321, 2872, RL.MAX_DISTANCE)
                 and not Quest:Get(391):isComplete() then
                 API.printlua("Landed at Agility Pyramid but Crocodile Tears quest incomplete, retrying...", 0, false)
                 landedUnsafe = true
@@ -721,7 +703,7 @@ function Teleports.resourceLocator(oreKey, expectedCoord)
         end
 
         if oreKey == "runite" then
-            if Utils.getDistance(coord.x, coord.y, 2860, 9578) <= RL.MAX_DISTANCE then
+            if Utils.isWithinDistance(coord.x, coord.y, 2860, 9578, RL.MAX_DISTANCE) then
                 local combatLevel = Utils.getCombatLevel()
                 if combatLevel < 31 then
                     API.printlua("Landed at Karamja Volcano but combat level " .. combatLevel .. " < 31, retrying...", 0, false)
