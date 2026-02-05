@@ -5,9 +5,13 @@ local idleHandler = {
     randomTime = 0,
 }
 
+local function bellRandom(min, max)
+    return math.floor((math.random(min, max) + math.random(min, max)) / 2)
+end
+
 function idleHandler.init()
     idleHandler.startTime = API.ScriptRuntime()
-    idleHandler.randomTime = math.random(5*60, 9*60)
+    idleHandler.randomTime = bellRandom(4*60, 10*60)
 end
 
 function idleHandler.check()
@@ -18,7 +22,7 @@ function idleHandler.check()
     end
 
     if (API.ScriptRuntime() - idleHandler.startTime) >= idleHandler.randomTime then
-        idleHandler.randomTime = math.random(5*60, 9*60)
+        idleHandler.randomTime = bellRandom(4*60, 10*60)
         idleHandler.startTime = API.ScriptRuntime()
         API.PIdle2()
         API.printlua("Anti-idle triggered", 0, false)
