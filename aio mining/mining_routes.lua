@@ -1996,6 +1996,13 @@ Routes.TO_DM_RD_DEPOSIT_BOX = {
     }
 }
 
+Routes.TO_DM_RD_DEPOSIT_BOX_FROM_GOLD = {
+    {
+        action = { walk = { waypoints = {{x = 1043, y = 4577}} } },
+        desc = "Walk to deposit box"
+    }
+}
+
 Routes.TO_DM_RD_DEPOSIT_BOX_FROM_DM = {
     {
         action = { walk = { waypoints = {{x = 3034, y = 9772}} } },

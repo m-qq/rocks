@@ -224,7 +224,7 @@ Banking.LOCATIONS = {
         name = "Dwarven RD Deposit Box",
         skip_if = { nearCoord = {x = 1042, y = 4578, maxDistance = 10} },
         routeOptions = {
-            { condition = { fromLocation = {"dwarven_resource_dungeon"} }, route = Routes.TO_DM_RD_DEPOSIT_BOX },
+            { condition = { nearCoord = {x = 1063, y = 4574, maxDistance = 15} }, route = Routes.TO_DM_RD_DEPOSIT_BOX_FROM_GOLD },
             { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 153, z = 12185} }, route = Routes.TO_DM_RD_DEPOSIT_BOX_FROM_DM_COAL },
             { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_DM_RD_DEPOSIT_BOX_FROM_DM },
             { route = Routes.TO_DWARVEN_RESOURCE_DUNGEON }
