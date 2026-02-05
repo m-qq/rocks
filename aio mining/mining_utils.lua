@@ -1,6 +1,7 @@
 local API = require("api")
 local DATA = require("aio mining/mining_data")
 local ORES = require("aio mining/mining_ores")
+local idleHandler = require("aio mining/idle_handler")
 
 local Utils = {}
 
@@ -39,6 +40,7 @@ local function waitForCondition(condition, timeout, checkInterval)
     checkInterval = checkInterval or 50
     local startTime = os.clock()
     while (os.clock() - startTime) < timeout and API.Read_LoopyLoop() do
+        idleHandler.check()
         if condition() then return true end
         API.RandomSleep2(checkInterval, 50, 0)
     end
@@ -80,6 +82,19 @@ function Utils.checkInterfaceText(interfacePath, expectedText)
     return #result > 0 and result[1].textids == expectedText
 end
 
+local chatDialogPath = DATA.RESOURCE_LOCATOR.INTERFACES.CHAT_DIALOG
+
+function Utils.dismissChatDialog()
+    local result = API.ScanForInterfaceTest2Get(false, chatDialogPath)
+    if #result > 0 and result[1].textids and result[1].textids:find("You found entry") then
+        API.printlua("Dismissing dialog...", 0, false)
+        API.KeyboardPress2(0x20, 60, 100)
+        waitForCondition(function()
+            return #API.ScanForInterfaceTest2Get(false, chatDialogPath) == 0
+        end, 5, 100)
+    end
+end
+
 function Utils.waitForAnimCycle(label)
     Utils.waitOrTerminate(function() return API.ReadPlayerAnim() > 0 end, 10, 100, label .. " animation did not start")
     Utils.waitOrTerminate(function() return API.ReadPlayerAnim() == 0 end, 10, 100, label .. " animation did not finish")
@@ -106,6 +121,7 @@ local function walkToWaypoint(waypoint, threshold, waypointIndex)
     local lastMovementTime = os.clock()
 
     while API.Read_LoopyLoop() do
+        idleHandler.check()
         local coord = API.PlayerCoord()
         if Utils.isWithinDistance(coord.x, coord.y, waypoint.x, waypoint.y, threshold) then
             return true

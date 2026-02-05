@@ -329,6 +329,7 @@ local success, err = pcall(function()
         if not idleHandler.check() then break end
         idleHandler.collectGarbage()
         API.DoRandomEvents()
+        Utils.dismissChatDialog()
         state.miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
 
         if loc.dailyLimit then
