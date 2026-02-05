@@ -25,8 +25,8 @@ local cachedWarningLabel = nil
 local cachedWarningCount = -1
 
 -- Gem formatter cache
-local cachedGemFormatter = nil
-local cachedGemFormatterPgc = nil
+local cachedGemFormatter = tostring
+local cachedGemFormatterPgc = -1
 
 function MiningGUI.reset()
     MiningGUI.open = true
