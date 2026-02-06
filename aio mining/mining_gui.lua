@@ -68,6 +68,26 @@ local function buildSortedList(tbl, nameField)
     return keys, names
 end
 
+local function meetsLevelReq(entry)
+    if not entry.levelReq then return true end
+    local level = API.XPLevelTable(API.GetSkillXP(entry.levelReq.skill))
+    return level >= entry.levelReq.level
+end
+
+local function buildFilteredBankList()
+    local keys, names = {}, {}
+    for key in pairs(Banking.LOCATIONS) do
+        if meetsLevelReq(Banking.LOCATIONS[key]) then
+            keys[#keys + 1] = key
+        end
+    end
+    table.sort(keys)
+    for i, key in ipairs(keys) do
+        names[i] = Banking.LOCATIONS[key].name
+    end
+    return keys, names
+end
+
 local function buildOreSortedList()
     local keys = {}
     for key in pairs(ORES) do
@@ -680,8 +700,25 @@ local function drawConfigTab(cfg, gui)
 
     if needsBanking then
         label("Bank")
-        local bankChanged, newBankIdx = ImGui.Combo("##bank", cfg.bankIndex, bankNames, 10)
-        if bankChanged then cfg.bankIndex = newBankIdx end
+        local filteredBankKeys, filteredBankNames = buildFilteredBankList()
+        local currentBankKey = bankKeys[cfg.bankIndex + 1]
+        local filteredIdx = 0
+        for i, key in ipairs(filteredBankKeys) do
+            if key == currentBankKey then
+                filteredIdx = i - 1
+                break
+            end
+        end
+        local bankChanged, newBankIdx = ImGui.Combo("##bank", filteredIdx, filteredBankNames, 10)
+        if bankChanged then
+            local newKey = filteredBankKeys[newBankIdx + 1]
+            for i, key in ipairs(bankKeys) do
+                if key == newKey then
+                    cfg.bankIndex = i - 1
+                    break
+                end
+            end
+        end
     end
 
     ImGui.Separator()

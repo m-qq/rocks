@@ -221,6 +221,7 @@ Banking.LOCATIONS = {
     },
     dwarven_resource_dungeon_deposit_box = {
         name = "Dwarven RD Deposit Box",
+        levelReq = { skill = "DUNGEONEERING", level = 15 },
         skip_if = { nearCoord = {x = 1042, y = 4578, maxDistance = 10} },
         routeOptions = {
             { condition = { nearCoord = {x = 1063, y = 4574, maxDistance = 15} }, route = Routes.TO_DM_RD_DEPOSIT_BOX_FROM_GOLD },
@@ -273,7 +274,6 @@ function Banking.openBank(bankLocation, bankPin)
     end, 15, 100, "Bank object did not load: " .. bankName) then
         return false
     end
-    API.RandomSleep2(600, 300, 300)
 
     if bank.npc then
         Interact:NPC(bank.npc, bank.action, range)
