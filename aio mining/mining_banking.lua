@@ -13,7 +13,7 @@ function Banking.closeBank()
         API.KeyboardPress2(0x1B, 60, 100)
         Utils.waitOrTerminate(function()
             return not API.Compare2874Status(24, false)
-        end, 5, 100, "Bank did not close")
+        end, 5, 100, "Bank did not close.")
         API.RandomSleep2(600, 600, 300)
     end
 end
@@ -696,3 +696,4 @@ function Banking.performBanking(config)
 end
 
 return Banking
+
