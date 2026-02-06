@@ -61,6 +61,16 @@ local MINING_LOCATIONS = {
         }
     },
 
+    burthorpe_cave_mine = {
+        name = "Burthorpe Cave Mine",
+        route = Routes.TO_BURTHORPE_CAVE_MINE,
+        skip_if = { nearCoords = {{x = 2267, y = 4496}, {x = 2257, y = 4503}} },
+        ores = {"common_gem_rock"},
+        oreCoords = {
+            common_gem_rock = {x = 2266, y = 4502}
+        }
+    },
+
     al_kharid_resource_dungeon = {
         name = "Al Kharid Resource Dungeon",
         routeOptions = {

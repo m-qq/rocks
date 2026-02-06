@@ -1771,6 +1771,28 @@ Routes.TO_BURTHORPE_BANK = {
     }
 }
 
+Routes.TO_BURTHORPE_CAVE_MINE = {
+    {
+        action = { lodestone = Teleports.LODESTONES.BURTHORPE },
+        skip_if = { nearCoord = {x = 2899, y = 3544} },
+        desc = "Teleport to Burthorpe lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2898, y = 3515}, {x = 2876, y = 3503}} } },
+        desc = "Walk to Burthorpe mine entrance"
+    },
+    {
+        action = { interact = { object = "Burthorpe mine", action = "Enter" } },
+        wait = { region = {x = 35, y = 70, z = 9030} },
+        timeout = 20,
+        desc = "Enter Burthorpe mine"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2266, y = 4502}} } },
+        desc = "Walk to common gem rocks"
+    }
+}
+
 Routes.TO_LUMBRIDGE_FURNACE = {
     {
         action = { lodestone = Teleports.LODESTONES.LUMBRIDGE },

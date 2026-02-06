@@ -14,11 +14,28 @@ local rockertunityTypeBuf = {4}
 
 -- Static lookup table for gem cutting
 local gemCutMap = {
+    [1625] = "Opal",
+    [1627] = "Jade",
+    [1629] = "Red topaz",
+    [21345] = "Lapis lazuli",
     [1623] = "Sapphire",
     [1621] = "Emerald",
     [1619] = "Ruby",
     [1617] = "Diamond",
     [1631] = "Dragonstone"
+}
+
+local gemCraftingReq = {
+    [1625] = 1,   -- Opal
+    [1627] = 13,  -- Jade
+    [1629] = 16,  -- Red topaz
+    [21345] = 1,  -- Lapis lazuli
+    [1633] = 999, -- Crushed gem (always drop)
+    [1623] = 20,  -- Sapphire
+    [1621] = 27,  -- Emerald
+    [1619] = 34,  -- Ruby
+    [1617] = 43,  -- Diamond
+    [1631] = 55   -- Dragonstone
 }
 
 -- Get the locator target ore from a location's route options
@@ -1318,25 +1335,28 @@ function Utils.dropItemById(oreId, displayName, useHotkey)
 
             local dropStartTime = os.clock()
             while Inventory:GetItemAmount(oreId) > 0 and (os.clock() - dropStartTime) < 15 do
-                API.printlua("Dropping... " .. Inventory:GetItemAmount(oreId) .. " remaining", 0, false)
                 API.RandomSleep2(300, 100, 100)
             end
 
             API.KeyboardUp(oreAB.hotkey)
             if Inventory:GetItemAmount(oreId) == 0 then return end
-            API.printlua("Failed to drop all via hotkey, switching to manual drop", 4, false)
+            API.printlua("Hotkey drop incomplete, using manual drop", 4, false)
         end
     end
 
-    while Inventory:GetItemAmount(oreId) > 0 do
-        local countBefore = Inventory:GetItemAmount(oreId)
-        API.DoAction_Inventory1(oreId, 0, 8, API.OFF_ACT_GeneralInterface_route2)
-        if not Utils.waitOrTerminate(function()
-            return Inventory:GetItemAmount(oreId) < countBefore
-        end, 3, 50, "Failed to drop") then
-            break
+    -- Fast drop using direct slot targeting
+    local allItems = Inventory:GetItems()
+    for _, item in ipairs(allItems) do
+        if item.id == oreId and item.slot then
+            API.DoAction_Interface(0x24, item.id, 8, 1473, 5, item.slot, API.OFF_ACT_GeneralInterface_route2)
+            API.RandomSleep2(70, 80, 40)
         end
     end
+
+    -- Wait for drops to complete
+    waitForCondition(function()
+        return Inventory:GetItemAmount(oreId) == 0
+    end, 10, 100)
 end
 
 function Utils.dropItemsBySlotOrder(itemIds)
@@ -1360,17 +1380,19 @@ function Utils.dropItemsBySlotOrder(itemIds)
     end
     table.sort(items, function(a, b) return a.slot < b.slot end)
 
+    -- Fast drop using direct slot targeting
     for _, item in ipairs(items) do
-        if Inventory:GetItemAmount(item.id) > 0 then
-            local countBefore = Inventory:GetItemAmount(item.id)
-            API.DoAction_Inventory1(item.id, 0, 8, API.OFF_ACT_GeneralInterface_route2)
-            if not Utils.waitOrTerminate(function()
-                return Inventory:GetItemAmount(item.id) < countBefore
-            end, 3, 50, "Failed to drop") then
-                break
-            end
-        end
+        API.DoAction_Interface(0x24, item.id, 8, 1473, 5, item.slot, API.OFF_ACT_GeneralInterface_route2)
+        API.RandomSleep2(70, 80, 40)
     end
+
+    -- Wait for all drops to complete
+    waitForCondition(function()
+        for id in pairs(idSet) do
+            if Inventory:GetItemAmount(id) > 0 then return false end
+        end
+        return true
+    end, 10, 100)
 end
 
 function Utils.dropAllOres(ore, state)
@@ -1387,7 +1409,13 @@ function Utils.dropAllOres(ore, state)
 end
 
 function Utils.isGemCuttingInterfaceOpen()
-    return Utils.checkInterfaceText(DATA.INTERFACES.GEM_CUTTING, "Gem Cutting")
+    if Utils.checkInterfaceText(DATA.INTERFACES.GEM_CUTTING, "Gem Cutting") then
+        return true
+    end
+    if Utils.checkInterfaceText(DATA.INTERFACES.LAPIS_LAZULI_CUTTING, "Lapis Lazuli") then
+        return true
+    end
+    return false
 end
 
 function Utils.cutGemType(gemId, gemName, cutName)
@@ -1428,13 +1456,32 @@ end
 function Utils.cutAndDropGems(ore, state)
     if not Utils.waitForMiningToStop(state) then return end
 
+    local craftingLevel = API.XPLevelTable(API.GetSkillXP("CRAFTING"))
+    local toDrop = {}
+
+    -- Cut what we can, track uncuttable for dropping
     for _, gemId in ipairs(ore.oreIds) do
-        local gemName = ore.oreNames and ore.oreNames[gemId] or ("Gem " .. gemId)
-        local cutName = gemCutMap[gemId] or gemName
-        Utils.cutGemType(gemId, gemName, cutName)
+        local reqLevel = gemCraftingReq[gemId] or 1
+        if craftingLevel >= reqLevel then
+            local gemName = ore.oreNames and ore.oreNames[gemId] or ("Gem " .. gemId)
+            local cutName = gemCutMap[gemId] or gemName
+            Utils.cutGemType(gemId, gemName, cutName)
+        else
+            toDrop[#toDrop + 1] = gemId
+        end
     end
 
-    Utils.dropItemsBySlotOrder(ore.cutIds)
+    -- Add all cut gem IDs to drop list
+    if ore.cutIds then
+        for _, cutId in ipairs(ore.cutIds) do
+            toDrop[#toDrop + 1] = cutId
+        end
+    end
+
+    -- Drop everything in one slot-order pass
+    if #toDrop > 0 then
+        Utils.dropItemsBySlotOrder(toDrop)
+    end
 end
 
 return Utils

@@ -1176,52 +1176,65 @@ local function drawWarningsTab(gui)
 end
 
 local function drawContent(data, gui)
-    if ImGui.BeginTabBar("##maintabs", 0) then
-        if not gui.started then
-            local configFlags = gui.selectConfigTab and ImGuiTabItemFlags.SetSelected or 0
-            gui.selectConfigTab = false
-            local configSelected = ImGui.BeginTabItem("Presets###config", nil, configFlags)
-            if configSelected then
-                ImGui.Spacing()
-                drawConfigTab(gui.config, gui)
-                ImGui.EndTabItem()
+    local tabBarOpen = ImGui.BeginTabBar("##maintabs", 0)
+    if not tabBarOpen then return end
+
+    if not gui.started then
+        local configFlags = gui.selectConfigTab and ImGuiTabItemFlags.SetSelected or 0
+        gui.selectConfigTab = false
+        local configSelected = ImGui.BeginTabItem("Presets###config", nil, configFlags)
+        if configSelected then
+            ImGui.Spacing()
+            local ok, err = pcall(drawConfigTab, gui.config, gui)
+            if not ok then
+                ImGui.TextColored(1.0, 0.3, 0.3, 1.0, "Config error: " .. tostring(err))
             end
+            ImGui.EndTabItem()
         end
-
-        if gui.started then
-            local infoFlags = gui.selectInfoTab and ImGuiTabItemFlags.SetSelected or 0
-            gui.selectInfoTab = false
-            if ImGui.BeginTabItem("Info###info", nil, infoFlags) then
-                ImGui.Spacing()
-                drawInfoTab(data)
-                ImGui.EndTabItem()
-            end
-
-            if ImGui.BeginTabItem("Metrics###metrics") then
-                ImGui.Spacing()
-                drawMetricsTab(data)
-                ImGui.EndTabItem()
-            end
-        end
-
-        if #gui.warnings > 0 then
-            -- Cache warning label to avoid string concat every frame
-            if #gui.warnings ~= cachedWarningCount then
-                cachedWarningCount = #gui.warnings
-                cachedWarningLabel = "Warnings (" .. cachedWarningCount .. ")###warnings"
-            end
-            local warnFlags = gui.selectWarningsTab and ImGuiTabItemFlags.SetSelected or 0
-            local warnSelected = ImGui.BeginTabItem(cachedWarningLabel, nil, warnFlags)
-            if warnSelected then gui.selectWarningsTab = false end
-            if warnSelected then
-                ImGui.Spacing()
-                drawWarningsTab(gui)
-                ImGui.EndTabItem()
-            end
-        end
-
-        ImGui.EndTabBar()
     end
+
+    if gui.started then
+        local infoFlags = gui.selectInfoTab and ImGuiTabItemFlags.SetSelected or 0
+        gui.selectInfoTab = false
+        if ImGui.BeginTabItem("Info###info", nil, infoFlags) then
+            ImGui.Spacing()
+            local ok, err = pcall(drawInfoTab, data)
+            if not ok then
+                ImGui.TextColored(1.0, 0.3, 0.3, 1.0, "Info error: " .. tostring(err))
+            end
+            ImGui.EndTabItem()
+        end
+
+        if ImGui.BeginTabItem("Metrics###metrics") then
+            ImGui.Spacing()
+            local ok, err = pcall(drawMetricsTab, data)
+            if not ok then
+                ImGui.TextColored(1.0, 0.3, 0.3, 1.0, "Metrics error: " .. tostring(err))
+            end
+            ImGui.EndTabItem()
+        end
+    end
+
+    if #gui.warnings > 0 then
+        -- Cache warning label to avoid string concat every frame
+        if #gui.warnings ~= cachedWarningCount then
+            cachedWarningCount = #gui.warnings
+            cachedWarningLabel = "Warnings (" .. cachedWarningCount .. ")###warnings"
+        end
+        local warnFlags = gui.selectWarningsTab and ImGuiTabItemFlags.SetSelected or 0
+        local warnSelected = ImGui.BeginTabItem(cachedWarningLabel, nil, warnFlags)
+        if warnSelected then gui.selectWarningsTab = false end
+        if warnSelected then
+            ImGui.Spacing()
+            local ok, err = pcall(drawWarningsTab, gui)
+            if not ok then
+                ImGui.TextColored(1.0, 0.3, 0.3, 1.0, "Warnings error: " .. tostring(err))
+            end
+            ImGui.EndTabItem()
+        end
+    end
+
+    ImGui.EndTabBar()
 end
 
 function MiningGUI.draw(data)
@@ -1253,15 +1266,12 @@ function MiningGUI.draw(data)
     local visible = ImGui.Begin(MiningGUI._titleCache, 0)
 
     if visible then
-        local ok, err = pcall(drawContent, data, MiningGUI)
-        if not ok then
-            ImGui.TextColored(1.0, 0.3, 0.3, 1.0, "Error: " .. tostring(err))
-        end
+        drawContent(data, MiningGUI)
     end
 
+    ImGui.End()
     ImGui.PopStyleVar(4)
     ImGui.PopStyleColor(4)
-    ImGui.End()
 
     return MiningGUI.open
 end

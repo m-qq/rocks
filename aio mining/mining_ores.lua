@@ -50,6 +50,16 @@ local ORES = {
         oresomeKey = nil,
         capacityBoostLevel = nil
     },
+    common_gem_rock = {
+        name = "Common gem rock",
+        action = "Mine",
+        oreIds = {1625, 1627, 1629, 21345, 1633},
+        oreNames = {[1625] = "Uncut opal", [1627] = "Uncut jade", [1629] = "Uncut red topaz", [21345] = "Uncut lapis lazuli", [1633] = "Crushed gem"},
+        cutIds = {1609, 1611, 1613, 21346},
+        tier = 1,
+        isGemRock = true,
+        noGemBag = true
+    },
     uncommon_gem_rock = {
         name = "Uncommon gem rock",
         action = "Mine",
