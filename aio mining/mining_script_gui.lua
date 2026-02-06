@@ -376,12 +376,15 @@ local success, err = pcall(function()
         if Inventory:IsFull() and cfg.cutAndDrop and ore.isGemRock then
             state.currentState = "Cutting Gems"
             Utils.cutAndDropGems(ore, state)
+            state.hasInteracted = false
         elseif Inventory:IsFull() and cfg.dropGems and ore.isGemRock then
             state.currentState = "Dropping"
             Utils.dropAllOres(ore, state)
+            state.hasInteracted = false
         elseif cfg.dropOres and Inventory:IsFull() then
             state.currentState = "Dropping"
             Utils.dropAllOres(ore, state)
+            state.hasInteracted = false
         elseif Utils.tryRechargeLocatorOnSite(cfg.location) then
             state.currentState = "Recharging Locator"
             API.RandomSleep2(300, 100, 100)
