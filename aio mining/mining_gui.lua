@@ -68,16 +68,40 @@ local function buildSortedList(tbl, nameField)
     return keys, names
 end
 
-local function meetsLevelReq(entry)
-    if not entry.levelReq then return true end
-    local level = API.XPLevelTable(API.GetSkillXP(entry.levelReq.skill))
-    return level >= entry.levelReq.level
+local function meetsRequirements(entry)
+    if not entry then return false end
+    if entry.levelReq then
+        local level = API.XPLevelTable(API.GetSkillXP(entry.levelReq.skill))
+        if level < entry.levelReq.level then return false end
+    end
+    if entry.requiredLevels then
+        for _, req in ipairs(entry.requiredLevels) do
+            local level = req.skill == "COMBAT" and Utils.getCombatLevel() or API.XPLevelTable(API.GetSkillXP(req.skill))
+            if level < req.level then return false end
+        end
+    end
+    if entry.requiredVarbits then
+        for _, req in ipairs(entry.requiredVarbits) do
+            if API.GetVarbitValue(req.varbit) ~= req.value then return false end
+        end
+    end
+    return true
 end
 
+local cachedFilteredBankKeys, cachedFilteredBankNames
+local lastBankFilterTime = 0
+
 local function buildFilteredBankList()
+    local now = os.clock()
+    if cachedFilteredBankKeys and (now - lastBankFilterTime) < 2 then
+        return cachedFilteredBankKeys, cachedFilteredBankNames
+    end
+    lastBankFilterTime = now
+
     local keys, names = {}, {}
     for key in pairs(Banking.LOCATIONS) do
-        if meetsLevelReq(Banking.LOCATIONS[key]) then
+        local entry = Banking.LOCATIONS[key]
+        if meetsRequirements(entry) and Utils.isBankReachable(key, true) then
             keys[#keys + 1] = key
         end
     end
@@ -85,7 +109,12 @@ local function buildFilteredBankList()
     for i, key in ipairs(keys) do
         names[i] = Banking.LOCATIONS[key].name
     end
-    return keys, names
+    if #keys == 0 then
+        cachedFilteredBankKeys, cachedFilteredBankNames = bankKeys, bankNames
+    else
+        cachedFilteredBankKeys, cachedFilteredBankNames = keys, names
+    end
+    return cachedFilteredBankKeys, cachedFilteredBankNames
 end
 
 local function buildOreSortedList()
@@ -251,11 +280,38 @@ local function getFilteredLocationIndices(oreKey)
     local set = oreToLocations[oreKey]
     if not set then return result end
     for i, locKey in ipairs(locationKeys) do
-        if set[locKey] then
+        if set[locKey] and meetsRequirements(LOCATIONS[locKey]) then
             result[#result + 1] = i
         end
     end
     return result
+end
+
+local cachedFilteredOreKeys, cachedFilteredOreNames
+local lastOreFilterTime = 0
+
+local function buildFilteredOreList()
+    local now = os.clock()
+    if cachedFilteredOreKeys and (now - lastOreFilterTime) < 2 then
+        return cachedFilteredOreKeys, cachedFilteredOreNames
+    end
+    lastOreFilterTime = now
+
+    local miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
+    local keys, names = {}, {}
+    for i, oreKey in ipairs(oreKeys) do
+        local ore = ORES[oreKey]
+        if ore and ore.tier <= miningLevel and #getFilteredLocationIndices(oreKey) > 0 then
+            keys[#keys + 1] = oreKey
+            names[#names + 1] = oreNames[i]
+        end
+    end
+    if #keys == 0 then
+        cachedFilteredOreKeys, cachedFilteredOreNames = oreKeys, oreNames
+    else
+        cachedFilteredOreKeys, cachedFilteredOreNames = keys, names
+    end
+    return cachedFilteredOreKeys, cachedFilteredOreNames
 end
 
 MiningGUI.config = {
@@ -640,12 +696,32 @@ local function drawConfigTab(cfg, gui)
     ImGui.PushItemWidth(-1)
 
     label("Ore")
-    local oreChanged, newOreIdx = ImGui.Combo("##ore", cfg.oreIndex, oreNames, 10)
+    local filteredOreKeys, filteredOreNames = buildFilteredOreList()
+    if #filteredOreKeys == 0 then
+        filteredOreKeys = oreKeys
+        filteredOreNames = oreNames
+    end
+    local currentOreKey = oreKeys[cfg.oreIndex + 1]
+    local filteredOreIdx = 0
+    for i, key in ipairs(filteredOreKeys) do
+        if key == currentOreKey then
+            filteredOreIdx = i - 1
+            break
+        end
+    end
+    local oreChanged, newOreIdx = ImGui.Combo("##ore", filteredOreIdx, filteredOreNames, 10)
     if oreChanged then
-        cfg.oreIndex = newOreIdx
+        local newOreKey = filteredOreKeys[newOreIdx + 1]
+        for i, key in ipairs(oreKeys) do
+            if key == newOreKey then
+                cfg.oreIndex = i - 1
+                break
+            end
+        end
         local selectedOreKey = oreKeys[cfg.oreIndex + 1]
         local currentLocKey = locationKeys[cfg.locationIndex + 1]
-        if not oreToLocations[selectedOreKey][currentLocKey] then
+        local locSet = oreToLocations[selectedOreKey]
+        if not locSet or not locSet[currentLocKey] or not meetsRequirements(LOCATIONS[currentLocKey]) then
             local filtered = getFilteredLocationIndices(selectedOreKey)
             if #filtered > 0 then
                 cfg.locationIndex = filtered[1] - 1

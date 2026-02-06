@@ -167,12 +167,14 @@ Banking.LOCATIONS = {
     },
     ithell = {
         name = "Ithell Bank Chest",
+        requiredVarbits = {{varbit = 24967, value = 1}},
         skip_if = { nearCoord = {x = 2154, y = 3340} },
         route = Routes.TO_ITHELL_BANK,
         bank = { object = "Bank chest", action = "Use" }
     },
     prifddinas = {
         name = "Prifddinas",
+        requiredVarbits = {{varbit = 24967, value = 1}},
         skip_if = { nearCoord = {x = 2208, y = 3360} },
         route = Routes.TO_PRIFDDINAS_BANK,
         bank = { npc = "Banker", action = "Bank" }

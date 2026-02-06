@@ -470,13 +470,14 @@ local function getBankReachabilityChecks()
 end
 
 -- Check if a bank location is reachable. Returns (ok, failMsg).
-function Utils.isBankReachable(bankKey)
+-- If silent is true, does not print to console (for GUI filtering).
+function Utils.isBankReachable(bankKey, silent)
     local checks = getBankReachabilityChecks()
     local checkFn = checks[bankKey]
     if not checkFn then return true, nil end
 
     local ok, failMsg = checkFn()
-    if not ok and failMsg then
+    if not ok and failMsg and not silent then
         API.printlua(failMsg, 4, false)
     end
     return ok, failMsg
@@ -574,6 +575,30 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
         if not bankOk then
             if bankFailMsg then MiningGUI.addWarning(bankFailMsg) end
             return nil
+        end
+
+        if bankLocation.levelReq then
+            local level = API.XPLevelTable(API.GetSkillXP(bankLocation.levelReq.skill))
+            if level < bankLocation.levelReq.level then
+                return fail(bankLocation.levelReq.skill .. " level " .. level .. " is below required level " .. bankLocation.levelReq.level .. " for " .. bankLocation.name)
+            end
+        end
+
+        if bankLocation.requiredLevels then
+            for _, req in ipairs(bankLocation.requiredLevels) do
+                local skillLevel = req.skill == "COMBAT" and Utils.getCombatLevel() or API.XPLevelTable(API.GetSkillXP(req.skill))
+                if skillLevel < req.level then
+                    return fail(req.skill .. " level " .. skillLevel .. " is below required level " .. req.level .. " for " .. bankLocation.name)
+                end
+            end
+        end
+
+        if bankLocation.requiredVarbits then
+            for _, req in ipairs(bankLocation.requiredVarbits) do
+                if API.GetVarbitValue(req.varbit) ~= req.value then
+                    return fail(req.message or ("Required unlock not met for " .. bankLocation.name))
+                end
+            end
         end
     end
 

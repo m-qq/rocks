@@ -42,7 +42,11 @@ end
 
 local function isLodestoneUnlocked(lode)
     if not lode.varbit then return true end
-    return API.GetVarbitValue(lode.varbit) == 1
+    local value = API.GetVarbitValue(lode.varbit)
+    if value ~= 1 then
+        API.printlua(lode.name .. " lodestone varbit " .. lode.varbit .. " = " .. value .. " (expected 1)", 0, false)
+    end
+    return value == 1
 end
 
 local function isLodestoneNetworkOpen()
