@@ -462,9 +462,10 @@ function MiningGUI.getConfig()
     }
 
     if isGemRock then
+        local noGemBag = oreDef and oreDef.noGemBag
         cfg.dropGems = c.dropGems
         cfg.cutAndDrop = c.cutAndDrop
-        cfg.useGemBag = c.useGemBag
+        cfg.useGemBag = not noGemBag and c.useGemBag or false
         cfg.dropOres = false
         cfg.useOreBox = false
         cfg.chaseRockertunities = false
@@ -801,13 +802,16 @@ local function drawConfigTab(cfg, gui)
 
     if isStackable then
     elseif isGemRock then
-        if cfg.dropGems or cfg.cutAndDrop then
-            disabledCheckbox("Use Gem Bag")
-        else
-            local changed, val = ImGui.Checkbox("Use Gem Bag##useGemBag", cfg.useGemBag)
-            if changed then
-                cfg.useGemBag = val
-                if val then cfg.dropGems = false; cfg.cutAndDrop = false end
+        local oreNoGemBag = ORES[selectedOreKey] and ORES[selectedOreKey].noGemBag
+        if not oreNoGemBag then
+            if cfg.dropGems or cfg.cutAndDrop then
+                disabledCheckbox("Use Gem Bag")
+            else
+                local changed, val = ImGui.Checkbox("Use Gem Bag##useGemBag", cfg.useGemBag)
+                if changed then
+                    cfg.useGemBag = val
+                    if val then cfg.dropGems = false; cfg.cutAndDrop = false end
+                end
             end
         end
         if cfg.dropGems or cfg.useGemBag then
