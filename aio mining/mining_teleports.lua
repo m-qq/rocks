@@ -499,6 +499,54 @@ function Teleports.deepSeaFishingHub()
     return true
 end
 
+function Teleports.hasLivingRockCavernsPortal()
+    if not hasItemInEquipment(GOTE_ID, 3) then return false end
+    local portal1 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_1)
+    local portal2 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_2)
+    return portal1 == 4 or portal2 == 4
+end
+
+function Teleports.livingRockCaverns()
+    if not hasItemInEquipment(GOTE_ID, 3) then
+        API.printlua("Grace of the Elves necklace not equipped", 4, false)
+        return false
+    end
+
+    local portal1 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_1)
+    local portal2 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_2)
+
+    local action
+    if portal1 == 4 then
+        action = 2
+    elseif portal2 == 4 then
+        action = 3
+    else
+        API.printlua("Living Rock Caverns is not set as a Grace of the Elves portal destination", 4, false)
+        return false
+    end
+
+    if not waitReadyToTeleport() then return false end
+
+    API.printlua("Teleporting to Living Rock Caverns...", 5, false)
+    API.DoAction_Interface(0xffffffff, GOTE_ID, action, 1464, 15, 2, API.OFF_ACT_GeneralInterface_route)
+
+    if not Utils.waitOrTerminate(function()
+        return API.ReadPlayerAnim() == 8941
+    end, 15, 100, "Failed to start Living Rock Caverns teleport") then
+        return false
+    end
+
+    if not Utils.waitOrTerminate(function()
+        local coord = API.PlayerCoord()
+        return API.ReadPlayerAnim() == 0 and Utils.isWithinDistance(coord.x, coord.y, 3651, 5122, 15)
+    end, 15, 100, "Failed to arrive at Living Rock Caverns") then
+        return false
+    end
+
+    API.printlua("Living Rock Caverns teleport complete", 0, false)
+    return true
+end
+
 function Teleports.maxGuild()
     if not waitReadyToTeleport() then return false end
 
@@ -774,6 +822,10 @@ function Teleports.resourceLocatorRoute(config)
     end
 
     return false
+end
+
+function Teleports.climbLRCRope()
+    return Utils.climbLRCRope()
 end
 
 return Teleports

@@ -118,6 +118,28 @@ local ORES = {
         oresomeKey = nil,
         capacityBoostLevel = nil
     },
+    concentrated_gold = {
+        name = "Concentrated gold deposit",
+        action = "Mine",
+        oreIds = {444},
+        tier = 80,
+        vbInBox = 43204,
+        oresomeKey = nil,
+        capacityBoostLevel = nil,
+        noRockertunities = true,
+        interactClosest = true
+    },
+    concentrated_coal = {
+        name = "Concentrated coal deposit",
+        action = "Mine",
+        oreIds = {453},
+        tier = 70,
+        vbInBox = 43194,
+        oresomeKey = "COAL",
+        capacityBoostLevel = 29,
+        noRockertunities = true,
+        interactClosest = true
+    },
 
     -- Tier 50
     runite = {

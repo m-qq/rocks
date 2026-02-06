@@ -470,6 +470,36 @@ local MINING_LOCATIONS = {
             seren_stones = {x = 2221, y = 3301}
         },
         requiredVarbits = {{varbit = 24967, value = 1, message = "Prifddinas lodestone not unlocked"}}
+    },
+
+    lrc_concentrated_gold = {
+        name = "LRC Gold",
+        skip_if = { nearCoord = {x = 3648, y = 5143, maxDistance = 15} },
+        routeOptions = {
+            { condition = { nearCoord = {x = 3652, y = 5114, maxDistance = 15} }, route = Routes.TO_LRC_GOLD_FROM_PULLEY },
+            { condition = { goteLRC = true }, route = Routes.TO_LRC_CONCENTRATED_GOLD },
+            { route = Routes.TO_LRC_CONCENTRATED_GOLD_VIA_FALADOR }
+        },
+        ores = {"concentrated_gold"},
+        oreCoords = {
+            concentrated_gold = {x = 3648, y = 5143}
+        },
+        requiresMagicGolemOutfit = true
+    },
+
+    lrc_concentrated_coal = {
+        name = "LRC Coal",
+        skip_if = { nearCoord = {x = 3665, y = 5091, maxDistance = 15} },
+        routeOptions = {
+            { condition = { nearCoord = {x = 3652, y = 5114, maxDistance = 15} }, route = Routes.TO_LRC_COAL_FROM_PULLEY },
+            { condition = { goteLRC = true }, route = Routes.TO_LRC_CONCENTRATED_COAL },
+            { route = Routes.TO_LRC_CONCENTRATED_COAL_VIA_FALADOR }
+        },
+        ores = {"concentrated_coal"},
+        oreCoords = {
+            concentrated_coal = {x = 3665, y = 5091}
+        },
+        requiresMagicGolemOutfit = true
     }
 }
 

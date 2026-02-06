@@ -231,7 +231,20 @@ Banking.LOCATIONS = {
             { condition = { fromLocation = {"dwarven_mine"}, region = {x = 47, y = 152, z = 12184} }, route = Routes.TO_DM_RD_DEPOSIT_BOX_FROM_DM },
             { route = Routes.TO_DWARVEN_RESOURCE_DUNGEON }
         },
-        depositBox = { object = "Bank deposit box", action = "Deposit-All", id = 25937 }
+        depositBox = { object = "Bank deposit box", action = "Deposit-All", id = 25937 },
+        noOreBox = true
+    },
+    lrc_pulley_lift = {
+        name = "LRC Pulley",
+        skip_if = { nearCoord = {x = 3652, y = 5114, maxDistance = 10} },
+        routeOptions = {
+            { condition = { fromLocation = {"lrc_concentrated_gold"}, nearCoord = {x = 3648, y = 5143} }, route = Routes.TO_LRC_PULLEY_LIFT_FROM_GOLD },
+            { condition = { fromLocation = {"lrc_concentrated_coal"}, nearCoord = {x = 3665, y = 5091} }, route = Routes.TO_LRC_PULLEY_LIFT_FROM_COAL },
+            { condition = { goteLRC = true }, route = Routes.TO_LRC_PULLEY_LIFT },
+            { route = Routes.TO_LRC_PULLEY_LIFT_VIA_FALADOR }
+        },
+        depositBox = { object = "Pulley lift", action = "Deposit-All", id = 45079 },
+        noOreBox = true
     }
 }
 

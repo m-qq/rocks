@@ -9,6 +9,15 @@ DATA.SENNTISTEN_SCROLL_ID = 39018
 DATA.SLAYER_CAPE_IDS = {9786, 9787, 34274, 34275, 53810, 53839, 31282, 53782}
 DATA.DUNGEONEERING_CAPE_IDS = {18508, 18509, 34294, 34295, 53820, 53849, 19709, 53792}
 
+-- Magic Golem outfit (prevents Living Rock Creatures aggression)
+DATA.MAGIC_GOLEM_OUTFIT = {
+    head = 31590,
+    torso = 31591,
+    legs = 31592,
+    gloves = 31593,
+    boots = 31594
+}
+
 DATA.ALL_SKILLS = {
     "ATTACK", "STRENGTH", "RANGED", "MAGIC", "DEFENCE", "CONSTITUTION",
     "PRAYER", "SUMMONING", "DUNGEONEERING", "AGILITY", "THIEVING", "SLAYER",
@@ -106,7 +115,8 @@ DATA.INTERFACES = {
     GEM_CUTTING = { { 1371,7,-1,0 }, { 1371,0,-1,0 }, { 1371,15,-1,0 }, { 1371,25,-1,0 }, { 1371,10,-1,0 }, { 1371,11,-1,0 }, { 1371,27,-1,0 }, { 1371,27,3,0 } },
     LAPIS_LAZULI_CUTTING = { { 1371,7,-1,0 }, { 1371,0,-1,0 }, { 1371,15,-1,0 }, { 1371,25,-1,0 }, { 1371,8,-1,0 }, { 1371,9,-1,0 }, { 1371,9,3,0 } },
     SUMMONING_POINTS = { { 1430,0,-1,0 }, { 1430,4,-1,0 }, { 1430,18,-1,0 }, { 1430,20,-1,0 }, { 1430,20,8,0 } },
-    SUMMONING_FAMILIAR = { { 662,0,-1,0 }, { 662,43,-1,0 }, { 662,50,-1,0 }, { 662,58,-1,0 } }
+    SUMMONING_FAMILIAR = { { 662,0,-1,0 }, { 662,43,-1,0 }, { 662,50,-1,0 }, { 662,58,-1,0 } },
+    LRC_ROPE_WARNING = { { 1262,8,-1,0 }, { 1262,11,-1,0 }, { 1262,11,14,0 } }
 }
 
 DATA.VARBIT_IDS.INVENTORY_STATE = 21816

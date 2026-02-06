@@ -183,6 +183,65 @@ function Utils.getCombatLevel()
     return vb and vb.state or 3
 end
 
+function Utils.hasMagicGolemOutfit()
+    local outfit = DATA.MAGIC_GOLEM_OUTFIT
+    local container = API.Container_Get_all(94)
+    if not container then return false end
+
+    local equipped = {}
+    for _, slot in ipairs(container) do
+        if slot.item_id > 0 then
+            equipped[slot.item_id] = true
+        end
+    end
+
+    return equipped[outfit.head] and equipped[outfit.torso] and equipped[outfit.legs]
+        and equipped[outfit.gloves] and equipped[outfit.boots]
+end
+
+function Utils.climbLRCRope()
+    API.printlua("Climbing rope to Living Rock Caverns...", 0, false)
+    Interact:Object("Rope", "Climb", 25)
+
+    -- Wait for warning dialog or climbing animation
+    if not Utils.waitOrTerminate(function()
+        return Utils.checkInterfaceText(DATA.INTERFACES.LRC_ROPE_WARNING, "Warning")
+            or API.ReadPlayerAnim() == 12217
+    end, 15, 100, "Failed to interact with LRC rope") then
+        return false
+    end
+
+    -- Handle warning dialog if present
+    if Utils.checkInterfaceText(DATA.INTERFACES.LRC_ROPE_WARNING, "Warning") then
+        -- Check if "Don't ask me again" is already checked via varbits
+        local dontAskChecked = API.GetVarbitValue(1167) == 7 or API.GetVarbitValue(7417) == 15
+        if not dontAskChecked then
+            API.printlua("Clicking 'Don't ask me this again'...", 0, false)
+            API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1262, 5, -1, API.OFF_ACT_GeneralInterface_route)
+            API.RandomSleep2(600, 100, 100)
+        end
+        API.printlua("Clicking 'Proceed regardless'...", 0, false)
+        API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1262, 2, -1, API.OFF_ACT_GeneralInterface_route)
+    end
+
+    -- Wait for climbing animation to start
+    if not Utils.waitOrTerminate(function()
+        return API.ReadPlayerAnim() == 12217
+    end, 10, 100, "Rope climbing animation did not start") then
+        return false
+    end
+
+    -- Wait for climbing to complete
+    if not Utils.waitOrTerminate(function()
+        return API.ReadPlayerAnim() == 0
+    end, 15, 100, "Rope climbing animation did not complete") then
+        return false
+    end
+
+    API.printlua("Arrived in Living Rock Caverns", 0, false)
+    return true
+end
+
 local ROUTE_CONDITION_CHECKS = {
     dungeoneeringCape = { skill = "DUNGEONEERING", capeName = "Dungeoneering cape" },
     slayerCape = { skill = "SLAYER", capeName = "Slayer cape" },
@@ -617,6 +676,12 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
                 end
             end
         end
+
+        if bankLocation.noOreBox and useOreBox then
+            useOreBox = false
+            playerOreBox = nil
+            MiningGUI.addWarning(bankLocation.name .. " does not support ore box (Deposit-All will deposit it)")
+        end
     end
 
     if not Routes.validateLodestonesForDestination(location) then
@@ -647,6 +712,12 @@ function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankin
             if skillLevel < req.level then
                 return fail(req.skill .. " level " .. skillLevel .. " is below required level " .. req.level .. " for " .. location.name)
             end
+        end
+    end
+
+    if location.requiresMagicGolemOutfit then
+        if not Utils.hasMagicGolemOutfit() then
+            return fail("Magic Golem outfit required for " .. location.name .. " to prevent Living Rock Creature aggression")
         end
     end
 
@@ -1218,7 +1289,7 @@ function Utils.mineRock(oreConfig, state)
     local reason = state.hasInteracted and "Stamina refresh" or "Initial interaction"
     API.printlua("Mining " .. oreConfig.name .. " (" .. reason .. ")", 0, false)
     local tile = nil
-    if not state.hasInteracted and cachedRocks and #cachedRocks > 0 then
+    if not oreConfig.interactClosest and not state.hasInteracted and cachedRocks and #cachedRocks > 0 then
         local rock = cachedRocks[math.random(#cachedRocks)]
         tile = WPOINT.new(rock.x, rock.y, 0)
     end

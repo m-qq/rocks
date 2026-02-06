@@ -87,6 +87,9 @@ function OreBox.fill(boxId)
     if not boxId then
         return false
     end
+    if not Inventory:Contains(boxId) then
+        return false
+    end
     if not Utils.ensureInventoryOpen() then return false end
     API.printlua("Filling ore box...", 0, false)
     if API.DoAction_Inventory1(boxId, 0, 1, API.OFF_ACT_GeneralInterface_route) then

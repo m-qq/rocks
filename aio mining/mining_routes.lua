@@ -340,6 +340,10 @@ function Routes.selectRoute(destination, fromLocationKey)
             if Teleports.hasResourceLocator(option.condition.resourceLocator) then
                 return option.route
             end
+        elseif option.condition.goteLRC then
+            if Teleports.hasLivingRockCavernsPortal() then
+                return option.route
+            end
         end
         ::continue::
     end
@@ -2061,6 +2065,194 @@ Routes.TO_DWARVEN_MINE_FROM_RD = {
         wait = { region = {x = 47, y = 152, z = 12184}, anim = 0 },
         timeout = 20,
         desc = "Exit resource dungeon"
+    }
+}
+
+Routes.TO_LRC_VIA_GOTE = {
+    {
+        action = { teleport = "livingRockCaverns" },
+        skip_if = { nearCoord = {x = 3651, y = 5122} },
+        desc = "Teleport to Living Rock Caverns via GOTE"
+    }
+}
+
+Routes.TO_LRC_VIA_FALADOR = {
+    {
+        action = { lodestone = Teleports.LODESTONES.FALADOR },
+        skip_if = { nearCoord = {x = 2967, y = 3404} },
+        desc = "Teleport to Falador lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2988, y = 3422}, {x = 3012, y = 3432}, {x = 3017, y = 3449}} } },
+        desc = "Walk to Dwarven Mine entrance"
+    },
+    {
+        action = { interact = { object = "Ladder", action = "Climb-down" } },
+        wait = { region = {x = 47, y = 153, z = 12185}, anim = 0 },
+        timeout = 20,
+        desc = "Climb down ladder"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3015, y = 9832}} } },
+        desc = "Walk to rope entrance"
+    },
+    {
+        action = { teleport = "climbLRCRope" },
+        desc = "Climb rope to Living Rock Caverns"
+    }
+}
+
+Routes.TO_LRC_CONCENTRATED_GOLD = {
+    {
+        action = { teleport = "livingRockCaverns" },
+        skip_if = { nearCoord = {x = 3651, y = 5122} },
+        desc = "Teleport to Living Rock Caverns via GOTE"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3648, y = 5141}} } },
+        desc = "Walk to concentrated gold deposit"
+    }
+}
+
+Routes.TO_LRC_CONCENTRATED_GOLD_VIA_FALADOR = {
+    {
+        action = { lodestone = Teleports.LODESTONES.FALADOR },
+        skip_if = { nearCoord = {x = 2967, y = 3404} },
+        desc = "Teleport to Falador lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2988, y = 3422}, {x = 3012, y = 3432}, {x = 3017, y = 3449}} } },
+        desc = "Walk to Dwarven Mine entrance"
+    },
+    {
+        action = { interact = { object = "Ladder", action = "Climb-down" } },
+        wait = { region = {x = 47, y = 153, z = 12185}, anim = 0 },
+        timeout = 20,
+        desc = "Climb down ladder"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3015, y = 9832}} } },
+        desc = "Walk to rope entrance"
+    },
+    {
+        action = { teleport = "climbLRCRope" },
+        desc = "Climb rope to Living Rock Caverns"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3648, y = 5141}} } },
+        desc = "Walk to concentrated gold deposit"
+    }
+}
+
+Routes.TO_LRC_CONCENTRATED_COAL = {
+    {
+        action = { teleport = "livingRockCaverns" },
+        skip_if = { nearCoord = {x = 3651, y = 5122} },
+        desc = "Teleport to Living Rock Caverns via GOTE"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3659, y = 5105}, {x = 3665, y = 5091}} } },
+        desc = "Walk to concentrated coal deposit"
+    }
+}
+
+Routes.TO_LRC_CONCENTRATED_COAL_VIA_FALADOR = {
+    {
+        action = { lodestone = Teleports.LODESTONES.FALADOR },
+        skip_if = { nearCoord = {x = 2967, y = 3404} },
+        desc = "Teleport to Falador lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2988, y = 3422}, {x = 3012, y = 3432}, {x = 3017, y = 3449}} } },
+        desc = "Walk to Dwarven Mine entrance"
+    },
+    {
+        action = { interact = { object = "Ladder", action = "Climb-down" } },
+        wait = { region = {x = 47, y = 153, z = 12185}, anim = 0 },
+        timeout = 20,
+        desc = "Climb down ladder"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3015, y = 9832}} } },
+        desc = "Walk to rope entrance"
+    },
+    {
+        action = { teleport = "climbLRCRope" },
+        desc = "Climb rope to Living Rock Caverns"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3659, y = 5105}, {x = 3665, y = 5091}} } },
+        desc = "Walk to concentrated coal deposit"
+    }
+}
+
+Routes.TO_LRC_PULLEY_LIFT = {
+    {
+        action = { teleport = "livingRockCaverns" },
+        skip_if = { nearCoord = {x = 3652, y = 5114} },
+        desc = "Teleport to Living Rock Caverns via GOTE"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3653, y = 5115}} } },
+        desc = "Walk to Pulley lift"
+    }
+}
+
+Routes.TO_LRC_PULLEY_LIFT_VIA_FALADOR = {
+    {
+        action = { lodestone = Teleports.LODESTONES.FALADOR },
+        skip_if = { nearCoord = {x = 2967, y = 3404} },
+        desc = "Teleport to Falador lodestone"
+    },
+    {
+        action = { walk = { waypoints = {{x = 2988, y = 3422}, {x = 3012, y = 3432}, {x = 3017, y = 3449}} } },
+        desc = "Walk to Dwarven Mine entrance"
+    },
+    {
+        action = { interact = { object = "Ladder", action = "Climb-down" } },
+        wait = { region = {x = 47, y = 153, z = 12185}, anim = 0 },
+        timeout = 20,
+        desc = "Climb down ladder"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3015, y = 9832}} } },
+        desc = "Walk to rope entrance"
+    },
+    {
+        action = { teleport = "climbLRCRope" },
+        desc = "Climb rope to Living Rock Caverns"
+    },
+    {
+        action = { walk = { waypoints = {{x = 3653, y = 5115}} } },
+        desc = "Walk to Pulley lift"
+    }
+}
+
+Routes.TO_LRC_PULLEY_LIFT_FROM_GOLD = {
+    {
+        action = { walk = { waypoints = {{x = 3653, y = 5115}} } },
+        desc = "Walk to Pulley lift"
+    }
+}
+
+Routes.TO_LRC_PULLEY_LIFT_FROM_COAL = {
+    {
+        action = { walk = { waypoints = {{x = 3659, y = 5105}, {x = 3653, y = 5115}} } },
+        desc = "Walk to Pulley lift"
+    }
+}
+
+Routes.TO_LRC_GOLD_FROM_PULLEY = {
+    {
+        action = { walk = { waypoints = {{x = 3648, y = 5141}} } },
+        desc = "Walk to concentrated gold deposit"
+    }
+}
+
+Routes.TO_LRC_COAL_FROM_PULLEY = {
+    {
+        action = { walk = { waypoints = {{x = 3659, y = 5105}, {x = 3665, y = 5091}} } },
+        desc = "Walk to concentrated coal deposit"
     }
 }
 
