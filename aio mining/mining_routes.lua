@@ -1343,7 +1343,7 @@ Routes.TO_MEMORIAL_TO_GUTHIX_BANK = {
         desc = "Teleport to Memorial to Guthix"
     },
     {
-        action = { walk = { waypoints = {{x = 2280, y = 3559}} } },
+        action = { walk = { waypoints = {{x = 2280, y = 3556}} } },
         desc = "Walk to bank chest"
     }
 }
