@@ -496,5 +496,4 @@ if not success then
 end
 
 ClearRender()
-API.printlua("Script terminated.", 0, false)
-
+API.printlua("Script terminated", 0, false)
