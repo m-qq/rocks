@@ -40,13 +40,16 @@ local function isAtLodestone(lode)
     return Utils.isWithinDistance(playerLoc.x, playerLoc.y, lode.loc.x, lode.loc.y, 20)
 end
 
+local lodestoneUnlockCache = {}
+
 local function isLodestoneUnlocked(lode)
     if not lode.varbit then return true end
-    local value = API.GetVarbitValue(lode.varbit)
-    if value ~= 1 then
-        API.printlua(lode.name .. " lodestone varbit " .. lode.varbit .. " = " .. value .. " (expected 1)", 0, false)
+    if lodestoneUnlockCache[lode.varbit] ~= nil then
+        return lodestoneUnlockCache[lode.varbit]
     end
-    return value == 1
+    local unlocked = API.GetVarbitValue(lode.varbit) == 1
+    lodestoneUnlockCache[lode.varbit] = unlocked
+    return unlocked
 end
 
 local function isLodestoneNetworkOpen()
@@ -151,8 +154,11 @@ local function hasItemInEquipment(itemId, slot)
 end
 
 function Teleports.getEquippedCape(capeIds)
+    local container = API.Container_Get_all(94)
+    if not container or not container[2] then return nil end
+    local equippedId = container[2].item_id
     for _, id in ipairs(capeIds) do
-        if hasItemInEquipment(id, 2) then return id end
+        if id == equippedId then return id end
     end
     return nil
 end
@@ -451,6 +457,16 @@ function Teleports.memoryStrand()
 end
 
 local GOTE_ID = 44550
+local cachedGotePortal1 = nil
+local cachedGotePortal2 = nil
+
+local function getGotePortals()
+    if not cachedGotePortal1 then
+        cachedGotePortal1 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_1)
+        cachedGotePortal2 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_2)
+    end
+    return cachedGotePortal1, cachedGotePortal2
+end
 
 function Teleports.hasGraceOfTheElves()
     return hasItemInEquipment(GOTE_ID, 3)
@@ -463,8 +479,7 @@ function Teleports.deepSeaFishingHub()
         return false
     end
 
-    local portal2 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_2)
-    local portal1 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_1)
+    local portal1, portal2 = getGotePortals()
 
     local action
     if portal2 == 16 then
@@ -501,8 +516,7 @@ end
 
 function Teleports.hasLivingRockCavernsPortal()
     if not hasItemInEquipment(GOTE_ID, 3) then return false end
-    local portal1 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_1)
-    local portal2 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_2)
+    local portal1, portal2 = getGotePortals()
     return portal1 == 4 or portal2 == 4
 end
 
@@ -512,8 +526,7 @@ function Teleports.livingRockCaverns()
         return false
     end
 
-    local portal1 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_1)
-    local portal2 = API.GetVarbitValue(DATA.VARBIT_IDS.GOTE_PORTAL_2)
+    local portal1, portal2 = getGotePortals()
 
     local action
     if portal1 == 4 then

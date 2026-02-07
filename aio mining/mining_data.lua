@@ -9,7 +9,6 @@ DATA.SENNTISTEN_SCROLL_ID = 39018
 DATA.SLAYER_CAPE_IDS = {9786, 9787, 34274, 34275, 53810, 53839, 31282, 53782}
 DATA.DUNGEONEERING_CAPE_IDS = {18508, 18509, 34294, 34295, 53820, 53849, 19709, 53792}
 
--- Magic Golem outfit (prevents Living Rock Creatures aggression)
 DATA.MAGIC_GOLEM_OUTFIT = {
     head = 31590,
     torso = 31591,
@@ -147,14 +146,14 @@ DATA.MINING_STAMINA_LEVELS = {
 }
 
 DATA.MEMORY_STRAND_SLOTS = {
-    { varbit = 33764, interfaceSlot = 10 },  -- Slot 1
-    { varbit = 33765, interfaceSlot = 11 },  -- Slot 2
-    { varbit = 33766, interfaceSlot = 12 },  -- Slot 3
-    { varbit = 33767, interfaceSlot = 13 },  -- Slot 4
-    { varbit = 37037, interfaceSlot = 14 },  -- Slot 5
-    { varbit = 37038, interfaceSlot = 15 },  -- Slot 6
-    { varbit = 37039, interfaceSlot = 16 },  -- Slot 7
-    { varbit = 37040, interfaceSlot = 17 }   -- Slot 8
+    { varbit = 33764, interfaceSlot = 10 },
+    { varbit = 33765, interfaceSlot = 11 },
+    { varbit = 33766, interfaceSlot = 12 },
+    { varbit = 33767, interfaceSlot = 13 },
+    { varbit = 37037, interfaceSlot = 14 },
+    { varbit = 37038, interfaceSlot = 15 },
+    { varbit = 37039, interfaceSlot = 16 },
+    { varbit = 37040, interfaceSlot = 17 }
 }
 
 DATA.JUJU_POTIONS = {
@@ -194,7 +193,6 @@ DATA.JUJU_POTIONS = {
     },
 }
 
--- Build a set of all juju potion IDs for keep-items
 DATA.ALL_JUJU_IDS = {}
 for _, def in pairs(DATA.JUJU_POTIONS) do
     for _, potion in ipairs(def.potions) do
@@ -261,23 +259,16 @@ DATA.SUMMONING_REFRESH_LOCATIONS = {
     },
 }
 
--- Build a set of all summoning pouch IDs for keep-items
 DATA.ALL_SUMMONING_POUCH_IDS = {}
 for _, def in pairs(DATA.SUMMONING_FAMILIARS) do
     DATA.ALL_SUMMONING_POUCH_IDS[def.pouchId] = true
 end
-
--- ============================================================================
--- RESOURCE LOCATOR
--- ============================================================================
 
 DATA.RESOURCE_LOCATOR = {
     EQUIPMENT_SLOT = 3,
     MAX_CHARGES = 50,
     TELEPORT_ANIM = 11885,
 
-    -- Ordered by tier (lowest first). scanForLocator iterates in order.
-    -- To add a new tier: append entry here, everything else derives from this.
     LOCATORS = {
         { name = "Inferior locator", id = 15005, energyId = 29315, energyPerCharge = 1,
           ores = { copper = true, tin = true, iron = true } },
@@ -289,8 +280,6 @@ DATA.RESOURCE_LOCATOR = {
           ores = { copper = true, tin = true, iron = true, silver = true, clay = true, gold = true, mithril = true, adamantite = true, runite = true } },
     },
 
-    -- Ore key to interface action params for selecting ore in locator window.
-    -- To add a new ore destination: add one entry here.
     DESTINATIONS = {
         copper     = { a = 0x2e, b = 0x1b4, c = 1, d = 844, e = 28, f = -1 },
         tin        = { a = 0x2e, b = 0x1b6, c = 1, d = 844, e = 29, f = -1 },
@@ -303,9 +292,6 @@ DATA.RESOURCE_LOCATOR = {
         runite     = { a = 0x2e, b = 0x1c3, c = 1, d = 844, e = 36, f = -1 },
     },
 
-    -- Known landing coords per ore, used for retry logic when targeting a specific location.
-    -- Multiple destinations per ore are possible (locator picks randomly).
-    -- To add a new known landing: append entry here.
     TELEPORT_TARGETS = {
         { ore = "copper",     coord = { x = 3229, y = 3150 } },
         { ore = "copper",     coord = { x = 2276, y = 4514 } },
@@ -327,9 +313,6 @@ DATA.RESOURCE_LOCATOR = {
         { ore = "runite",     coord = { x = 2628, y = 3140 } },
     },
 
-    -- Mining location key to { ore, coord } for alternate route mode.
-    -- Uses lowest-tier locator ore that lands near each location.
-    -- To add a new alternate route: add entry here + route def in mining_routes + routeOption in mining_locations.
     ALTERNATE_ROUTES = {
         lumbridge_se                = { ore = "copper",  coord = { x = 3229, y = 3150 } },
         lumbridge_sw                = { ore = "iron",    coord = { x = 3148, y = 3150 } },
@@ -356,7 +339,6 @@ DATA.RESOURCE_LOCATOR = {
     },
 }
 
--- Derived lookup sets, built once from LOCATORS, used by banking/keepItems
 DATA.ALL_LOCATOR_IDS = {}
 DATA.ALL_ENERGY_IDS = {}
 for _, loc in ipairs(DATA.RESOURCE_LOCATOR.LOCATORS) do

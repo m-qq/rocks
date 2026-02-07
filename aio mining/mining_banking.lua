@@ -45,11 +45,16 @@ for id in pairs(DATA.ALL_ENERGY_IDS) do
 end
 
 local containerCheckBuf = Utils.containerCheckBuf
+local NPC_SEARCH_TYPES = {1}
+local OBJECT_SEARCH_TYPES = {0, 12}
+local bankSearchIdBuf = {-1}
+local bankSearchNameBuf = {""}
 
 local bankCache = {}
 local bankCachePopulated = false
 local bankEnergyDepleted = {}
 local notedModeDisabled = false
+local cachedWithdrawVb = nil
 
 local function cacheBankItems(idSet)
     for id in pairs(idSet) do
@@ -69,6 +74,14 @@ function Banking.resetCache()
     Utils.clearTable(bankCache)
     Utils.clearTable(bankEnergyDepleted)
     bankCachePopulated = false
+    cachedWithdrawVb = nil
+end
+
+local function getWithdrawVb()
+    if not cachedWithdrawVb then
+        cachedWithdrawVb = API.GetVarbitValue(45189)
+    end
+    return cachedWithdrawVb
 end
 
 local function bankCacheGet(itemId)
@@ -258,7 +271,7 @@ local function depositItem(itemId, itemName)
     if count == 1 then
         action = 2
     else
-        local vb = API.GetVarbitValue(45189)
+        local vb = getWithdrawVb()
         action = vb == 7 and 1 or 7
     end
     API.printlua(string.format("Depositing %s (count: %d, action: %d)", itemName, count, action), 0, false)
@@ -284,9 +297,10 @@ function Banking.openBank(bankLocation, bankPin)
     local range = bank.range or 40
 
     local bankName = bank.npc or bank.object
-    local searchTypes = bank.npc and {1} or {0, 12}
+    local searchTypes = bank.npc and NPC_SEARCH_TYPES or OBJECT_SEARCH_TYPES
+    bankSearchNameBuf[1] = bankName
     if not Utils.waitOrTerminate(function()
-        local results = API.ReadAllObjectsArray(searchTypes, {-1}, {bankName})
+        local results = API.ReadAllObjectsArray(searchTypes, bankSearchIdBuf, bankSearchNameBuf)
         return #results > 0
     end, 15, 100, "Bank object did not load: " .. bankName) then
         return false
@@ -472,7 +486,7 @@ function Banking.withdrawJuju(potionDef)
     end
 
     API.printlua("Withdrawing juju potion (dose " .. potion.dose .. ")...", 0, false)
-    local withdrawAction = API.GetVarbitValue(45189) == 2 and 1 or 2
+    local withdrawAction = getWithdrawVb() == 2 and 1 or 2
     API.DoAction_Bank(potion.id, withdrawAction, API.OFF_ACT_GeneralInterface_route)
 
     if not Utils.waitOrTerminate(function()
@@ -507,7 +521,7 @@ function Banking.withdrawSummoningPouch(familiarDef)
     end
 
     API.printlua("Withdrawing " .. familiarDef.name .. " pouch...", 0, false)
-    local withdrawAction = API.GetVarbitValue(45189) == 2 and 1 or 2
+    local withdrawAction = getWithdrawVb() == 2 and 1 or 2
     API.DoAction_Bank(familiarDef.pouchId, withdrawAction, API.OFF_ACT_GeneralInterface_route)
 
     if not Utils.waitOrTerminate(function()
@@ -541,7 +555,7 @@ function Banking.withdrawEnergy(locatorDef)
 
     if not disableNotedMode() then return 0 end
 
-    local withdrawAction = API.GetVarbitValue(45189) == 7 and 1 or 7
+    local withdrawAction = getWithdrawVb() == 7 and 1 or 7
     API.DoAction_Bank(locatorDef.energyId, withdrawAction, API.OFF_ACT_GeneralInterface_route)
 
     if not Utils.waitOrTerminate(function()

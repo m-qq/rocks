@@ -7,7 +7,6 @@ local Routes = {}
 
 Routes.useLocator = false
 
--- Reusable single-element buffers for GetAllObjArray1 calls
 local objIdBuf = {0}
 local objTypeBuf = {0}
 
@@ -153,7 +152,6 @@ function Routes.executeStep(step)
                 end
 
                 if step.retryOnAnim then
-                    -- Pattern: interact, wait for success coord OR fail anim, retry on fail
                     while os.clock() - startTime < timeout do
                         if checkWaitCondition(step.wait) then
                             return true
@@ -174,7 +172,6 @@ function Routes.executeStep(step)
                         Interact:Object(i.object, i.action, i.tile, i.range or 40)
                     end
                 else
-                    -- Pattern: interact, wait for objectState change or anim cycle
                     local waitStart = os.clock()
                     while os.clock() - startTime < timeout do
                         if checkWaitCondition(step.wait) then
@@ -350,7 +347,6 @@ function Routes.selectRoute(destination, fromLocationKey)
     return nil
 end
 
--- Map teleport type to the item IDs it requires.
 local teleportItemMap = {
     archJournal = { DATA.ARCH_JOURNAL_ID },
     ringOfKinship = { DATA.RING_OF_KINSHIP_ID },
@@ -358,7 +354,6 @@ local teleportItemMap = {
     slayerCape = DATA.SLAYER_CAPE_IDS,
 }
 
--- Return the set of item IDs required by a route's teleport steps.
 function Routes.getRouteItemRequirements(route)
     local items = {}
     if not route then return items end
@@ -375,7 +370,6 @@ function Routes.getRouteItemRequirements(route)
     return items
 end
 
--- Return the set of item IDs required by the selected route for a destination.
 function Routes.getSelectedRouteItemRequirements(destination, fromLocationKey)
     if not destination then return {} end
     local route = Routes.selectRoute(destination, fromLocationKey)

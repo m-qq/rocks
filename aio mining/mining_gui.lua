@@ -15,16 +15,13 @@ MiningGUI.selectInfoTab = false
 MiningGUI.uiMode = "presets"
 MiningGUI.presetSaveName = ""
 
--- Module-level constants to avoid per-frame allocations
 local DEFAULT_GEM_COLOR = {0.6, 0.6, 0.6}
 local POTION_KEYS = {"none", "juju", "perfect"}
 local POTION_NAMES = {"None", "Juju Mining Potion", "Perfect Juju Mining Potion"}
 
--- Warning label cache
 local cachedWarningLabel = nil
 local cachedWarningCount = -1
 
--- Gem formatter cache
 local cachedGemFormatter = tostring
 local cachedGemFormatterPgc = -1
 
@@ -68,15 +65,32 @@ local function buildSortedList(tbl, nameField)
     return keys, names
 end
 
+local skillLevelCache = {}
+local skillLevelCacheTime = 0
+
+local function getCachedSkillLevel(skill)
+    local now = os.clock()
+    if now - skillLevelCacheTime > 10 then
+        Utils.clearTable(skillLevelCache)
+        skillLevelCacheTime = now
+    end
+    if not skillLevelCache[skill] then
+        skillLevelCache[skill] = skill == "COMBAT"
+            and Utils.getCombatLevel()
+            or API.XPLevelTable(API.GetSkillXP(skill))
+    end
+    return skillLevelCache[skill]
+end
+
 local function meetsRequirements(entry)
     if not entry then return false end
     if entry.levelReq then
-        local level = API.XPLevelTable(API.GetSkillXP(entry.levelReq.skill))
+        local level = getCachedSkillLevel(entry.levelReq.skill)
         if level < entry.levelReq.level then return false end
     end
     if entry.requiredLevels then
         for _, req in ipairs(entry.requiredLevels) do
-            local level = req.skill == "COMBAT" and Utils.getCombatLevel() or API.XPLevelTable(API.GetSkillXP(req.skill))
+            local level = getCachedSkillLevel(req.skill)
             if level < req.level then return false end
         end
     end
@@ -297,7 +311,7 @@ local function buildFilteredOreList()
     end
     lastOreFilterTime = now
 
-    local miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
+    local miningLevel = getCachedSkillLevel("MINING")
     local keys, names = {}, {}
     for i, oreKey in ipairs(oreKeys) do
         local ore = ORES[oreKey]
@@ -1106,7 +1120,6 @@ local function drawInfoTab(data)
                 ImGui.TableSetupColumn("gem", ImGuiTableColumnFlags.WidthStretch, 0.38)
                 ImGui.TableSetupColumn("cnt", ImGuiTableColumnFlags.WidthStretch, 0.62)
                 local pgc = data.gemBag.perGemCapacity
-                -- Cache formatter to avoid creating closure every frame
                 if pgc ~= cachedGemFormatterPgc then
                     cachedGemFormatterPgc = pgc
                     cachedGemFormatter = pgc and function(v) return v .. " / " .. pgc end or tostring

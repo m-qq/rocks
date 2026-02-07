@@ -102,6 +102,9 @@ local state = {
     lastInteractTick = 0,
     nextTickTarget = 0,
     hasInteracted = false,
+    familiarWarned = false,
+    jujuWarned = false,
+    rocksScanned = false,
     noStamina = selectedOreConfig and selectedOreConfig.noStamina or false,
     miningLevel = API.XPLevelTable(API.GetSkillXP("MINING")),
     currentState = "Idle",
@@ -330,7 +333,11 @@ local success, err = pcall(function()
         idleHandler.collectGarbage()
         API.DoRandomEvents()
         Utils.dismissChatDialog()
-        state.miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
+        local now = os.clock()
+        if now - (state._lastLevelCheck or 0) >= 10 then
+            state.miningLevel = API.XPLevelTable(API.GetSkillXP("MINING"))
+            state._lastLevelCheck = now
+        end
 
         if loc.dailyLimit then
             local current = API.GetVarbitValue(loc.dailyLimit.varbit)
@@ -468,7 +475,6 @@ local success, err = pcall(function()
                     end
                 else
                     local staminaPercent = Utils.getStaminaDrainPercent()
-                    local miningInProgress = API.GetVarbitValue(DATA.VARBIT_IDS.MINING_PROGRESS) > 0
                     if not state.hasInteracted or state.miningLevel < 15 or not miningInProgress or staminaPercent >= cfg.staminaRefreshPercent then
                         state.currentState = "Mining"
                         if not Utils.mineRock(ore, state) then break end

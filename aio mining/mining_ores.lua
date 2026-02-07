@@ -1,6 +1,5 @@
 local ORES = {
 
-    -- Tier 1
     copper = {
         name = "Copper rock",
         action = "Mine",
@@ -20,7 +19,6 @@ local ORES = {
         capacityBoostLevel = 7
     },
 
-    -- Tier 10
     iron = {
         name = "Iron rock",
         action = "Mine",
@@ -31,7 +29,6 @@ local ORES = {
         capacityBoostLevel = 18
     },
 
-    -- Tier 20
     coal = {
         name = "Coal rock",
         action = "Mine",
@@ -79,7 +76,6 @@ local ORES = {
         isGemRock = true
     },
 
-    -- Tier 30
     mithril = {
         name = "Mithril rock",
         action = "Mine",
@@ -90,7 +86,6 @@ local ORES = {
         capacityBoostLevel = 37
     },
 
-    -- Tier 40
     adamant = {
         name = "Adamantite rock",
         action = "Mine",
@@ -141,7 +136,6 @@ local ORES = {
         interactClosest = true
     },
 
-    -- Tier 50
     runite = {
         name = "Runite rock",
         action = "Mine",
@@ -152,7 +146,6 @@ local ORES = {
         capacityBoostLevel = 55
     },
 
-    -- Tier 60
     orichalcite = {
         name = "Orichalcite rock",
         action = "Mine",
@@ -172,7 +165,6 @@ local ORES = {
         capacityBoostLevel = 66
     },
 
-    -- Tier 70
     necrite = {
         name = "Necrite rock",
         action = "Mine",
@@ -192,7 +184,6 @@ local ORES = {
         capacityBoostLevel = 72
     },
 
-    -- Tier 80
     banite = {
         name = "Banite rock",
         action = "Mine",
@@ -203,7 +194,6 @@ local ORES = {
         capacityBoostLevel = 85
     },
 
-    -- Tier 90
     light_animica = {
         name = "Light animica rock",
         action = "Mine",
@@ -223,7 +213,6 @@ local ORES = {
         capacityBoostLevel = 95
     },
 
-    -- Tier 100 (Dungeoneering)
     novite = {
         name = "Novite rock",
         action = "Mine",
@@ -321,7 +310,6 @@ local ORES = {
         capacityBoostLevel = 102,
     },
 
-    -- Tier 104
     platinum = {
         name = "Platinum rock",
         action = "Mine",
@@ -351,7 +339,6 @@ local ORES = {
         noRockertunities = true,
     },
 
-    -- Special
     seren_stones = {
         name = "Seren stone",
         action = "Mine",

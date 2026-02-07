@@ -5,14 +5,12 @@ local idleHandler = require("aio mining/idle_handler")
 
 local Utils = {}
 
--- Reusable single-element buffers to avoid throwaway table allocations
 local containerCheckBuf = {0}
 Utils.containerCheckBuf = containerCheckBuf
 local objIdBuf = {0}
 local objTypeBuf = {0}
 local rockertunityTypeBuf = {4}
 
--- Static lookup table for gem cutting
 local gemCutMap = {
     [1625] = "Opal",
     [1627] = "Jade",
@@ -38,8 +36,6 @@ local gemCraftingReq = {
     [1631] = 55   -- Dragonstone
 }
 
--- Get the locator target ore from a location's route options
--- Returns the ore key (e.g., "silver") that the locator should teleport to
 function Utils.getLocatorOreForLocation(locationKey)
     local LOCATIONS = require("aio mining/mining_locations")
     local location = LOCATIONS[locationKey]
@@ -203,7 +199,6 @@ function Utils.climbLRCRope()
     API.printlua("Climbing rope to Living Rock Caverns...", 0, false)
     Interact:Object("Rope", "Climb", 25)
 
-    -- Wait for warning dialog or climbing animation
     if not Utils.waitOrTerminate(function()
         return Utils.checkInterfaceText(DATA.INTERFACES.LRC_ROPE_WARNING, "Warning")
             or API.ReadPlayerAnim() == 12217
@@ -211,9 +206,7 @@ function Utils.climbLRCRope()
         return false
     end
 
-    -- Handle warning dialog if present
     if Utils.checkInterfaceText(DATA.INTERFACES.LRC_ROPE_WARNING, "Warning") then
-        -- Check if "Don't ask me again" is already checked via varbits
         local dontAskChecked = API.GetVarbitValue(1167) == 7 or API.GetVarbitValue(7417) == 15
         if not dontAskChecked then
             API.printlua("Clicking 'Don't ask me this again'...", 0, false)
@@ -224,14 +217,12 @@ function Utils.climbLRCRope()
         API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1262, 2, -1, API.OFF_ACT_GeneralInterface_route)
     end
 
-    -- Wait for climbing animation to start
     if not Utils.waitOrTerminate(function()
         return API.ReadPlayerAnim() == 12217
     end, 10, 100, "Rope climbing animation did not start") then
         return false
     end
 
-    -- Wait for climbing to complete
     if not Utils.waitOrTerminate(function()
         return API.ReadPlayerAnim() == 0
     end, 15, 100, "Rope climbing animation did not complete") then
@@ -480,8 +471,6 @@ function Utils.ensureAtOreLocation(location, selectedOre)
     return true
 end
 
---- Check if all skills are at least the given level.
---- Returns (true) or (false, skillName, skillLevel) for the first failing skill.
 function Utils.checkAllSkillLevels(minLevel)
     for _, skill in ipairs(DATA.ALL_SKILLS) do
         local level = API.XPLevelTable(API.GetSkillXP(skill))
@@ -492,7 +481,6 @@ function Utils.checkAllSkillLevels(minLevel)
     return true
 end
 
--- Bank reachability checks - each returns (ok) or (false, failMsg)
 local function getBankReachabilityChecks()
     local Teleports = require("aio mining/mining_teleports")
     return {
@@ -545,8 +533,6 @@ local function getBankReachabilityChecks()
     }
 end
 
--- Check if a bank location is reachable. Returns (ok, failMsg).
--- If silent is true, does not print to console (for GUI filtering).
 function Utils.isBankReachable(bankKey, silent)
     local checks = getBankReachabilityChecks()
     local checkFn = checks[bankKey]
@@ -564,7 +550,6 @@ function Utils.validateBankReachability(selectedBankingLocation)
 end
 
 function Utils.validateMiningSetup(selectedLocation, selectedOre, selectedBankingLocation, playerOreBox, useOreBox, skipBanking)
-    -- Lazy requires: these modules depend on mining_utils, so require at call time to avoid circular loads
     local LOCATIONS = require("aio mining/mining_locations")
     local Banking = require("aio mining/mining_banking")
     local Routes = require("aio mining/mining_routes")
@@ -770,7 +755,6 @@ function Utils.clearRockCache()
     lastRockertunityTime = 0
 end
 
--- Generic buff tracker factory for juju and summoning
 local function createBuffTracker()
     return {
         refreshThresholds = {},
@@ -882,9 +866,6 @@ function Utils.forceIdle()
     API.RandomSleep2(300, 150, 100)
 end
 
--- Summoning familiar functions
-
-
 function Utils.getSummoningPoints()
     local result = API.ScanForInterfaceTest2Get(false, DATA.INTERFACES.SUMMONING_POINTS)
     if result and result[1] and result[1].textids then
@@ -994,7 +975,6 @@ function Utils.refreshSummoningPoints(config)
     local Routes = require("aio mining/mining_routes")
     local Banking = require("aio mining/mining_banking")
 
-    -- Build destination from refresh location data
     local route = Routes[refreshLocation.routeKey]
     if not route then
         API.printlua("No route found for " .. refreshLocation.name .. " (key: " .. tostring(refreshLocation.routeKey) .. ")", 4, false)
@@ -1015,7 +995,6 @@ function Utils.refreshSummoningPoints(config)
         return false, false
     end
 
-    -- Wait for refresh object to load
     local obj = refreshLocation.refreshObject
     if obj and obj.id then
         objIdBuf[1] = obj.id
@@ -1108,8 +1087,6 @@ local function typeNumber(num)
     API.RandomSleep2(500, 300, 300)
 end
 
--- Opens recharge dialog, adds charges from energy already in inventory.
--- Returns (success, hasMoreEnergy).
 function Utils.doRechargeDialog(locator, isEquipped)
     local energyCount = Inventory:GetItemAmount(locator.energyId)
     if energyCount <= 0 then
@@ -1117,7 +1094,6 @@ function Utils.doRechargeDialog(locator, isEquipped)
         return false, false
     end
 
-    -- Unequip locator if currently equipped so we can interact with it in inventory
     if isEquipped then
         API.printlua("Unequipping locator to recharge...", 0, false)
         API.DoAction_Interface(0xffffffff, locator.id, 1, 1464, 15, 3, API.OFF_ACT_GeneralInterface_route)
@@ -1191,7 +1167,6 @@ function Utils.doRechargeDialog(locator, isEquipped)
     local newCharges = Teleports.getLocatorCharges(locator, false)
     API.printlua("Recharged: " .. currentCharges .. " -> " .. math.floor(newCharges) .. "/" .. RL.MAX_CHARGES, 0, false)
 
-    -- Re-equip if it was originally equipped
     if isEquipped then
         API.printlua("Re-equipping locator...", 0, false)
         API.DoAction_Inventory1(locator.id, 0, 2, API.OFF_ACT_GeneralInterface_route)
@@ -1203,8 +1178,6 @@ function Utils.doRechargeDialog(locator, isEquipped)
 
     return newCharges > currentCharges, maxFromEnergy > actualAdd
 end
-
--- Shared mining functions (used by both script and script_gui)
 
 function Utils.isMiningActive(state)
     if state.noStamina or state.miningLevel < 15 then
@@ -1343,8 +1316,6 @@ function Utils.hasOresInInventory(ore)
     return false
 end
 
--- Recharge locator on-site if we have energy and charges are empty
--- Returns true if recharged, false if no recharge needed or couldn't recharge
 function Utils.tryRechargeLocatorOnSite(locationKey)
     local Routes = require("aio mining/mining_routes")
     if not Routes.useLocator then return false end
@@ -1366,7 +1337,6 @@ function Utils.tryRechargeLocatorOnSite(locationKey)
     return Utils.doRechargeDialog(locatorDef, locatorEquipped)
 end
 
--- Returns true if we need to bank specifically for locator energy
 function Utils.needsLocatorRecharge(locationKey)
     local Routes = require("aio mining/mining_routes")
     if not Routes.useLocator then return false end
@@ -1439,7 +1409,6 @@ function Utils.dropItemById(oreId, displayName, useHotkey)
         end
     end
 
-    -- Fast drop using direct slot targeting
     local allItems = Inventory:GetItems()
     for _, item in ipairs(allItems) do
         if item.id == oreId and item.slot then
@@ -1448,7 +1417,6 @@ function Utils.dropItemById(oreId, displayName, useHotkey)
         end
     end
 
-    -- Wait for drops to complete
     waitForCondition(function()
         return Inventory:GetItemAmount(oreId) == 0
     end, 10, 100)
@@ -1475,13 +1443,11 @@ function Utils.dropItemsBySlotOrder(itemIds)
     end
     table.sort(items, function(a, b) return a.slot < b.slot end)
 
-    -- Fast drop using direct slot targeting
     for _, item in ipairs(items) do
         API.DoAction_Interface(0x24, item.id, 8, 1473, 5, item.slot, API.OFF_ACT_GeneralInterface_route2)
         API.RandomSleep2(70, 80, 40)
     end
 
-    -- Wait for all drops to complete
     waitForCondition(function()
         for id in pairs(idSet) do
             if Inventory:GetItemAmount(id) > 0 then return false end
@@ -1554,7 +1520,6 @@ function Utils.cutAndDropGems(ore, state)
     local craftingLevel = API.XPLevelTable(API.GetSkillXP("CRAFTING"))
     local toDrop = {}
 
-    -- Cut what we can, track uncuttable for dropping
     for _, gemId in ipairs(ore.oreIds) do
         local reqLevel = gemCraftingReq[gemId] or 1
         if craftingLevel >= reqLevel then
@@ -1566,14 +1531,12 @@ function Utils.cutAndDropGems(ore, state)
         end
     end
 
-    -- Add all cut gem IDs to drop list
     if ore.cutIds then
         for _, cutId in ipairs(ore.cutIds) do
             toDrop[#toDrop + 1] = cutId
         end
     end
 
-    -- Drop everything in one slot-order pass
     if #toDrop > 0 then
         Utils.dropItemsBySlotOrder(toDrop)
     end
