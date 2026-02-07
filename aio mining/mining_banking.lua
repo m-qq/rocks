@@ -13,7 +13,7 @@ function Banking.closeBank()
         API.KeyboardPress2(0x1B, 60, 100)
         Utils.waitOrTerminate(function()
             return not API.Compare2874Status(24, false)
-        end, 5, 100, "Bank did not close")
+        end, 5, 100, "Bank did not close.")
         API.RandomSleep2(600, 600, 300)
     end
 end
@@ -48,6 +48,7 @@ local containerCheckBuf = Utils.containerCheckBuf
 
 local bankCache = {}
 local bankCachePopulated = false
+local bankEnergyDepleted = {}
 local notedModeDisabled = false
 
 local function cacheBankItems(idSet)
@@ -66,6 +67,7 @@ end
 
 function Banking.resetCache()
     Utils.clearTable(bankCache)
+    Utils.clearTable(bankEnergyDepleted)
     bankCachePopulated = false
 end
 
@@ -525,11 +527,13 @@ end
 function Banking.withdrawEnergy(locatorDef)
     if not API.BankOpen2() then return 0 end
     if not locatorDef then return 0 end
+    if bankEnergyDepleted[locatorDef.energyId] then return 0 end
 
     local bankEnergy = API.Container_Get_s(95, locatorDef.energyId)
     local available = bankEnergy and bankEnergy.item_stack or 0
 
     if available <= 0 then
+        bankEnergyDepleted[locatorDef.energyId] = true
         return 0
     end
 
@@ -611,7 +615,8 @@ function Banking.performBanking(config)
         local locatorEquipped = false
         local withdrawnEnergy = 0
         local needsRecharge = false
-        if Routes.useLocator and miningLocationKey then
+        local hasLocatorRoute = miningLocationKey and Utils.getLocatorOreForLocation(miningLocationKey)
+        if hasLocatorRoute then
             local Teleports = require("aio mining/mining_teleports")
             local locatorTargetOre = Utils.getLocatorOreForLocation(miningLocationKey)
             if locatorTargetOre then
@@ -696,3 +701,4 @@ function Banking.performBanking(config)
 end
 
 return Banking
+

@@ -1117,6 +1117,19 @@ function Utils.doRechargeDialog(locator, isEquipped)
         return false, false
     end
 
+    -- Unequip locator if currently equipped so we can interact with it in inventory
+    if isEquipped then
+        API.printlua("Unequipping locator to recharge...", 0, false)
+        API.DoAction_Interface(0xffffffff, locator.id, 1, 1464, 15, 3, API.OFF_ACT_GeneralInterface_route)
+        API.RandomSleep2(600, 300, 300)
+        if not waitForCondition(function()
+            return Inventory:Contains(locator.id)
+        end, 10, 100) then
+            API.printlua("Failed to unequip locator", 4, false)
+            return false, false
+        end
+    end
+
     API.printlua("Opening recharge dialog for " .. locator.name .. "...", 0, false)
     API.DoAction_Inventory1(locator.id, 0, 7, API.OFF_ACT_GeneralInterface_route2)
     API.RandomSleep2(600, 300, 300)
@@ -1172,11 +1185,22 @@ function Utils.doRechargeDialog(locator, isEquipped)
 
     local Teleports = require("aio mining/mining_teleports")
     waitForCondition(function()
-        return Teleports.getLocatorCharges(locator, isEquipped) > currentCharges
+        return Teleports.getLocatorCharges(locator, false) > currentCharges
     end, 5, 100)
 
-    local newCharges = Teleports.getLocatorCharges(locator, isEquipped)
+    local newCharges = Teleports.getLocatorCharges(locator, false)
     API.printlua("Recharged: " .. currentCharges .. " -> " .. math.floor(newCharges) .. "/" .. RL.MAX_CHARGES, 0, false)
+
+    -- Re-equip if it was originally equipped
+    if isEquipped then
+        API.printlua("Re-equipping locator...", 0, false)
+        API.DoAction_Inventory1(locator.id, 0, 2, API.OFF_ACT_GeneralInterface_route)
+        API.RandomSleep2(600, 300, 300)
+        waitForCondition(function()
+            return not Inventory:Contains(locator.id)
+        end, 10, 100)
+    end
+
     return newCharges > currentCharges, maxFromEnergy > actualAdd
 end
 
