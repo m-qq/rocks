@@ -2248,5 +2248,5 @@ Routes.TO_LRC_COAL_FROM_PULLEY = {
         desc = "Walk to concentrated coal deposit"
     }
 }
-
 return Routes
+
