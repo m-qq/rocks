@@ -9,6 +9,9 @@ Routes.useLocator = false
 
 local objIdBuf = {0}
 local objTypeBuf = {0}
+local interactSearchTypes = {0, 12}
+local interactSearchIdBuf = {-1}
+local interactSearchNameBuf = {""}
 
 local function checkWaitCondition(wait)
     local coord = API.PlayerCoord()
@@ -130,6 +133,13 @@ function Routes.executeStep(step)
             end
         elseif step.action.interact then
             local i = step.action.interact
+            interactSearchNameBuf[1] = i.object
+            if not Utils.waitOrTerminate(function()
+                return #API.ReadAllObjectsArray(interactSearchTypes, interactSearchIdBuf, interactSearchNameBuf) > 0
+            end, 15, desc .. " object did not load: " .. i.object) then
+                return false
+            end
+            API.RandomSleep2(600, 200, 0)
             Interact:Object(i.object, i.action, i.tile, i.range or 40)
         elseif step.action.walk then
             local w = step.action.walk
@@ -146,49 +156,38 @@ function Routes.executeStep(step)
         if step.retryAction and step.action and step.action.interact then
             local timeout = step.timeout or 20
             local startTime = os.clock()
-            while os.clock() - startTime < timeout do
-                if checkWaitCondition(step.wait) then
-                    return true
-                end
+            local function remaining() return timeout - (os.clock() - startTime) end
+
+            while remaining() > 0 and API.Read_LoopyLoop() do
+                if checkWaitCondition(step.wait) then return true end
 
                 if step.retryOnAnim then
-                    while os.clock() - startTime < timeout do
-                        if checkWaitCondition(step.wait) then
-                            return true
-                        end
-                        if API.ReadPlayerAnim() == step.retryOnAnim then
-                            API.printlua("Route: Failed attempt, retrying...", 0, false)
-                            while os.clock() - startTime < timeout do
-                                if API.ReadPlayerAnim() == 0 then break end
-                                API.RandomSleep2(100, 50, 50)
-                            end
-                            startTime = os.clock()
-                            break
-                        end
-                        API.RandomSleep2(100, 50, 50)
-                    end
-                    if os.clock() - startTime < timeout then
-                        local i = step.action.interact
-                        Interact:Object(i.object, i.action, i.tile, i.range or 40)
+                    local retryNeeded = false
+                    Utils.waitForCondition(function()
+                        if checkWaitCondition(step.wait) then return true end
+                        if API.ReadPlayerAnim() == step.retryOnAnim then retryNeeded = true; return true end
+                        return false
+                    end, remaining())
+                    if checkWaitCondition(step.wait) then return true end
+                    if retryNeeded then
+                        API.printlua("Route: Failed attempt, retrying...", 0, false)
+                        Utils.waitForCondition(function() return API.ReadPlayerAnim() == 0 end, remaining())
+                        startTime = os.clock()
                     end
                 else
                     local waitStart = os.clock()
-                    while os.clock() - startTime < timeout do
-                        if checkWaitCondition(step.wait) then
-                            return true
-                        end
-                        if os.clock() - waitStart >= 3 and API.ReadPlayerAnim() == 0 then
-                            break
-                        end
-                        API.RandomSleep2(100, 50, 50)
-                    end
-                    if os.clock() - startTime < timeout then
-                        local i = step.action.interact
-                        Interact:Object(i.object, i.action, i.tile, i.range or 40)
-                    end
+                    Utils.waitForCondition(function()
+                        if checkWaitCondition(step.wait) then return true end
+                        return (os.clock() - waitStart) >= 3 and API.ReadPlayerAnim() == 0
+                    end, remaining())
+                    if checkWaitCondition(step.wait) then return true end
                 end
 
-                API.RandomSleep2(100, 50, 50)
+                if remaining() > 0 and API.Read_LoopyLoop() then
+                    local i = step.action.interact
+                    Interact:Object(i.object, i.action, i.tile, i.range or 40)
+                end
+                API.RandomSleep2(250, 250, 0)
             end
             API.printlua("Failed: " .. desc, 4, false)
             API.Write_LoopyLoop(false)
@@ -196,7 +195,7 @@ function Routes.executeStep(step)
         else
             if not Utils.waitOrTerminate(function()
                 return checkWaitCondition(step.wait)
-            end, step.timeout or 20, 100, "Failed: " .. desc) then
+            end, step.timeout or 20, "Failed: " .. desc) then
                 return false
             end
         end
